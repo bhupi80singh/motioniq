@@ -719,12 +719,13 @@ const MOVE = {
 // Animate a reference figure through a pose sequence on a canvas.
 function playMoveGuide(canvas, testId, stop){
   const g = MOVE[testId]; if(!g){ return ()=>{}; }
-  let i=0, az=20, t0=performance.now(), raf;
+  let i=0, t0=performance.now(), raf;
   const loop = () => {
     if (stop && stop()){ cancelAnimationFrame(raf); return; }
     const dur=1400, k=g.poses.length, phase=((performance.now()-t0)/dur)%k, idx=Math.floor(phase), frac=phase-idx;
     const a=g.poses[idx], b=g.poses[(idx+1)%k], lerp=(x,y)=>x+(y-x)*frac;
     const spec={ hipFlex:lerp(a.hipFlex||0,b.hipFlex||0), kneeFlex:lerp(a.kneeFlex||0,b.kneeFlex||0), trunk:lerp(a.trunk||0,b.trunk||0), arms:lerp(a.arms||10,b.arms||10), label:a.label };
+    const az = 35 + Math.sin((performance.now()-t0)/2200)*18;   // gentle turn so depth is always visible
     drawSpecAvatar(canvas, spec, az);
     raf=requestAnimationFrame(loop);
   };
@@ -736,10 +737,7 @@ function drawSpecAvatar(canvas, spec, azDeg){
   const c=canvas.getContext('2d'), W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
   c.clearRect(0,0,W,H);
   const P=rotateProject(idealSkeleton(spec), azDeg, W, H);
-  const bones=[['head','neck'],['neck','spine'],['spine','pelvis'],['neck','leftShoulder'],['leftShoulder','leftElbow'],['leftElbow','leftWrist'],['neck','rightShoulder'],['rightShoulder','rightElbow'],['rightElbow','rightWrist'],['pelvis','leftHip'],['leftHip','leftKnee'],['leftKnee','leftAnkle'],['leftAnkle','leftFoot'],['pelvis','rightHip'],['rightHip','rightKnee'],['rightKnee','rightAnkle'],['rightAnkle','rightFoot']];
-  c.strokeStyle='#6FA8FF'; c.lineWidth=8; c.lineCap='round';
-  for (const [a,b] of bones){ if(!P[a]||!P[b])continue; c.beginPath(); c.moveTo(...P[a]); c.lineTo(...P[b]); c.stroke(); }
-  c.fillStyle='#F2F4F7'; for (const k in P){ c.beginPath(); c.arc(P[k][0],P[k][1],9,0,7); c.fill(); }
+  drawMannequin(c, P, bodyScale(P), '#6FA8FF');
   c.fillStyle='#9AA7BD'; c.font='24px sans-serif'; c.textAlign='center'; if(spec.label) c.fillText(spec.label, W/2, H*0.07);
 }
 
@@ -866,25 +864,27 @@ const IDEAL = {
 function idealSkeleton(spec){
   const d2r=x=>x*Math.PI/180, P={};
   const hipY=0.95, torso=0.55, thigh=0.45, shank=0.45, upper=0.28, fore=0.26;
-  const lean=d2r(spec.trunk||0);
+  const lean=d2r(spec.trunk||0);          // forward lean tilts the torso in +Z (toward viewer-depth)
   P.pelvis=[0,hipY,0];
-  P.spine=[Math.sin(lean)*torso*0.5,hipY+Math.cos(lean)*torso*0.5,0];
-  P.neck=[Math.sin(lean)*torso,hipY+Math.cos(lean)*torso,0];
-  P.head=[Math.sin(lean)*(torso+0.2),hipY+Math.cos(lean)*(torso+0.2),0];
+  const sX=Math.sin(lean), cX=Math.cos(lean);
+  P.spine=[0, hipY+cX*torso*0.5, sX*torso*0.5];
+  P.neck =[0, hipY+cX*torso,     sX*torso];
+  P.head =[0, hipY+cX*(torso+0.2), sX*(torso+0.2)];
   const hip=d2r(spec.hipFlex||0), knee=d2r(spec.kneeFlex||0);
   for (const s of [[-1,'left'],[1,'right']]){
-    const [sx,side]=s, hx=sx*0.1;
+    const [sx,side]=s, hx=sx*0.11;
     P[side+'Hip']=[hx,hipY,0];
-    const thighDir=[Math.sin(hip)*0, -Math.cos(hip), -Math.sin(hip)]; // flex swings knee forward (-z)
-    P[side+'Knee']=[hx+thighDir[0]*thigh, hipY+thighDir[1]*thigh, thighDir[2]*thigh];
-    const shankAng=hip-knee;
-    P[side+'Ankle']=[P[side+'Knee'][0], P[side+'Knee'][1]-Math.cos(shankAng)*shank, P[side+'Knee'][2]-Math.sin(shankAng)*shank];
-    P[side+'Foot']=[P[side+'Ankle'][0], P[side+'Ankle'][1]-0.05, P[side+'Ankle'][2]-0.15];
-    P[side+'Shoulder']=[sx*0.2, P.neck[1], P.neck[2]];
-    // Arm raised along a great circle: 0deg = down, 180deg = overhead.
-    const ang=d2r(spec.arms||10), ay=P.neck[1];
-    P[side+'Elbow']=[sx*0.22, ay - Math.cos(ang)*upper, Math.sin(ang)*upper*0.15];
-    P[side+'Wrist']=[sx*0.22, ay - Math.cos(ang)*(upper+fore), Math.sin(ang)*(upper+fore)*0.15];
+    // thigh swings forward (+Z) and down as hip flexes
+    P[side+'Knee']=[hx, hipY-Math.cos(hip)*thigh, Math.sin(hip)*thigh];
+    const shankAng=hip-knee;                 // shank hangs from the knee
+    P[side+'Ankle']=[hx, P[side+'Knee'][1]-Math.cos(shankAng)*shank, P[side+'Knee'][2]+Math.sin(shankAng)*shank];
+    P[side+'Foot']=[hx, P[side+'Ankle'][1]-0.04, P[side+'Ankle'][2]+0.16];
+    // shoulders ride on the leaned neck, offset sideways
+    P[side+'Shoulder']=[sx*0.20, P.neck[1], P.neck[2]];
+    // arm: 0deg down -> 180deg overhead, swinging through +Z front
+    const ang=d2r(spec.arms||12);
+    P[side+'Elbow']=[sx*0.20, P.neck[1]-Math.cos(ang)*upper, P.neck[2]+Math.sin(ang)*upper*0.6];
+    P[side+'Wrist']=[sx*0.20, P.neck[1]-Math.cos(ang)*(upper+fore), P.neck[2]+Math.sin(ang)*(upper+fore)*0.6];
   }
   return P;
 }
@@ -898,17 +898,74 @@ function rotateProject(P, azDeg, W, H){
   const pix={}; for (const k in out){ pix[k]=[out[k][0]*sc+ox, H*0.95-((out[k][1]-minY)*sc)]; }
   return pix;
 }
+
+// ---- human-shape (mannequin) renderer ----
+// Draws a filled, rounded human figure from projected joints. `col` sets the body tint.
+function drawMannequin(c, P, s, col){
+  const dark=shade(col,-22), light=shade(col,16);
+  const cap=(a,b,w1,w2,fill)=>{ if(!P[a]||!P[b])return; const [x1,y1]=P[a],[x2,y2]=P[b];
+    const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L,a1=Math.atan2(ny,nx),a2=Math.atan2(-ny,-nx);
+    c.beginPath(); c.moveTo(x1+nx*w1,y1+ny*w1); c.lineTo(x2+nx*w2,y2+ny*w2);
+    c.arc(x2,y2,w2,a1,a2,true); c.lineTo(x1-nx*w1,y1-ny*w1); c.arc(x1,y1,w1,a2,a1,true);
+    c.closePath(); c.fillStyle=fill; c.fill(); };
+  const joint=(k,r,fill)=>{ if(!P[k])return; c.beginPath(); c.arc(P[k][0],P[k][1],r,0,7); c.fillStyle=fill; c.fill(); };
+
+  // BACK layer: right limbs (drawn first so left overlaps = depth)
+  cap('rightShoulder','rightElbow',0.22*s,0.16*s,dark); cap('rightElbow','rightWrist',0.15*s,0.11*s,dark); joint('rightElbow',0.15*s,dark); joint('rightWrist',0.13*s,dark);
+  cap('rightHip','rightKnee',0.30*s,0.22*s,dark); cap('rightKnee','rightAnkle',0.20*s,0.13*s,dark); joint('rightKnee',0.20*s,dark); cap('rightAnkle','rightFoot',0.13*s,0.09*s,dark);
+
+  // TORSO: smooth trunk through shoulders and hips with a waist pinch
+  if (P.leftShoulder&&P.rightShoulder&&P.leftHip&&P.rightHip){
+    const ls=P.leftShoulder,rs=P.rightShoulder,lh=P.leftHip,rh=P.rightHip;
+    const midSh=[(ls[0]+rs[0])/2,(ls[1]+rs[1])/2], midHip=[(lh[0]+rh[0])/2,(lh[1]+rh[1])/2];
+    const waistL=[lerp2(ls,lh,.55)], waistR=[lerp2(rs,rh,.55)];
+    c.beginPath();
+    c.moveTo(ls[0],ls[1]);
+    c.quadraticCurveTo(ls[0]-(rs[0]-ls[0])*.06, (ls[1]+lh[1])/2, waistL[0][0], waistL[0][1]);
+    c.quadraticCurveTo(lh[0]-(rh[0]-lh[0])*.04, lh[1], lh[0], lh[1]);
+    c.lineTo(rh[0],rh[1]);
+    c.quadraticCurveTo(rh[0]+(rh[0]-lh[0])*.04, rh[1], waistR[0][0], waistR[0][1]);
+    c.quadraticCurveTo(rs[0]+(rs[0]-ls[0])*.06, (rs[1]+rh[1])/2, rs[0],rs[1]);
+    c.quadraticCurveTo(midSh[0], midSh[1]-0.12*s, ls[0],ls[1]);
+    c.closePath(); c.fillStyle=col; c.fill();
+    // shading down the center
+    c.save(); c.clip(); const g=c.createLinearGradient(midSh[0],midSh[1],midHip[0],midHip[1]);
+    g.addColorStop(0,light); g.addColorStop(.5,col); g.addColorStop(1,dark); c.globalAlpha=.55; c.fillStyle=g; c.fillRect(0,0,1e4,1e4); c.globalAlpha=1; c.restore();
+  }
+  // shoulder & hip caps to round the torso corners
+  joint('leftShoulder',0.24*s,col); joint('rightShoulder',0.24*s,shade(col,-6));
+  joint('leftHip',0.26*s,col); joint('rightHip',0.26*s,shade(col,-6));
+
+  // FRONT layer: left limbs
+  cap('leftShoulder','leftElbow',0.22*s,0.16*s,col); cap('leftElbow','leftWrist',0.15*s,0.11*s,col); joint('leftElbow',0.15*s,col); joint('leftWrist',0.13*s,col);
+  cap('leftHip','leftKnee',0.30*s,0.22*s,col); cap('leftKnee','leftAnkle',0.20*s,0.13*s,col); joint('leftKnee',0.20*s,col); cap('leftAnkle','leftFoot',0.13*s,0.09*s,dark);
+
+  // NECK + HEAD
+  cap('neck','head',0.16*s,0.14*s,col);
+  if (P.head&&P.neck){ const [hx,hy]=P.head, [nx,ny]=P.neck; const ang=Math.atan2(hy-ny,hx-nx);
+    const cx=hx, cy=hy; const rx=0.34*s, ry=0.44*s;
+    c.save(); c.translate(cx,cy); c.rotate(ang+Math.PI/2);
+    c.beginPath(); c.ellipse(0,0,rx,ry,0,0,7); c.fillStyle=col; c.fill();
+    c.beginPath(); c.ellipse(-rx*0.25,0,rx*0.5,ry*0.7,0,0,7); c.fillStyle=light; c.globalAlpha=.5; c.fill(); c.globalAlpha=1; // face-front hint
+    c.restore();
+  }
+}
+function lerp2(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }
+function shade(hex,amt){ const n=parseInt(hex.slice(1),16); let r=(n>>16)+amt,g=((n>>8)&255)+amt,b=(n&255)+amt;
+  r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b));
+  return '#'+((r<<16|g<<8|b)>>>0).toString(16).padStart(6,'0'); }
+
 function renderAvatar(canvas, exKey, azDeg){
   const spec=IDEAL[exKey]||IDEAL.bridge, c=canvas.getContext('2d');
   const W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
   c.clearRect(0,0,W,H);
   const P=rotateProject(idealSkeleton(spec), azDeg, W, H);
-  const bones=[['head','neck'],['neck','spine'],['spine','pelvis'],['neck','leftShoulder'],['leftShoulder','leftElbow'],['leftElbow','leftWrist'],['neck','rightShoulder'],['rightShoulder','rightElbow'],['rightElbow','rightWrist'],['pelvis','leftHip'],['leftHip','leftKnee'],['leftKnee','leftAnkle'],['leftAnkle','leftFoot'],['pelvis','rightHip'],['rightHip','rightKnee'],['rightKnee','rightAnkle'],['rightAnkle','rightFoot']];
-  c.strokeStyle='#3DDC97'; c.lineWidth=8; c.lineCap='round';
-  for (const [a,b] of bones){ if(!P[a]||!P[b])continue; c.beginPath(); c.moveTo(...P[a]); c.lineTo(...P[b]); c.stroke(); }
-  c.fillStyle='#F2F4F7'; for (const k in P){ c.beginPath(); c.arc(P[k][0],P[k][1],9,0,7); c.fill(); }
+  const scale=bodyScale(P);
+  drawMannequin(c, P, scale, '#4FD1A6');
   c.fillStyle='#9AA7BD'; c.font='26px sans-serif'; c.textAlign='center'; c.fillText(spec.label, W/2, H*0.06);
 }
+// Estimate a limb-width unit from torso height so the body scales with the figure.
+function bodyScale(P){ if(P.neck&&P.pelvis){ return Math.max(14, Math.hypot(P.neck[0]-P.pelvis[0], P.neck[1]-P.pelvis[1])*0.5); } return 22; }
 
 /* ---------------- guided workout: split-screen, hands-free ---------------- */
 const EXKEY = { calf:'calf', kneeWall:'kneeWall', squatHold:'squatHold', bridge:'bridge', split:'split', stepUp:'stepUp',
@@ -930,7 +987,7 @@ async function guided(keys){
   let cancelled=false, skip=false;
   const wireVoice=()=>voiceCommands({ pause:()=>{if(!PAUSE.on){pauseFor();wctl();wireVoice();}}, resume:()=>{if(PAUSE.on){resumeRun();wctl();wireVoice();}}, skip:()=>{skip=true;}, cancel:()=>{cancelled=true;}, stop:()=>{skip=true;}, flip:flipCamera, next:()=>{skip=true;} }); wireVoice();
 
-  let az = 30, dragging=false, lastX=0;   // avatar azimuth
+  let az = 35, dragging=false, lastX=0;   // avatar azimuth (35deg = readable 3/4)
   const cleanup = () => { closeCamera(); cam.classList.remove('split'); panel.remove(); };
 
   for (let i=0; i<list.length && !cancelled; i++){
@@ -969,7 +1026,7 @@ async function guided(keys){
         <div class="avatar-wrap">
           <canvas id="av"></canvas>
           <div class="av-btns">
-            <button data-a="0">Front</button><button data-a="90">Side</button><button data-a="180">Rear</button><button data-a="45">45°</button>
+            <button data-a="20">Front</button><button data-a="65">Side</button><button data-a="200">Back</button><button data-a="40">3⁄4</button>
           </div>
           <p class="tip">Drag the figure to rotate</p>
         </div>
@@ -985,7 +1042,7 @@ async function guided(keys){
     const paint=()=>renderAvatar(av, EXKEY[e.key]||'bridge', az);
     paint();
     panel.querySelectorAll('.av-btns button').forEach(b=>b.onclick=()=>{ az=+b.dataset.a; paint(); });
-    const down=x=>{dragging=true;lastX=x;}, move=x=>{ if(dragging){ az=(az+(x-lastX))%360; lastX=x; paint(); } }, up=()=>dragging=false;
+    const down=x=>{dragging=true;lastX=x;}, move=x=>{ if(dragging){ az=(az+(x-lastX)*0.5+360)%360; lastX=x; paint(); } }, up=()=>dragging=false;
     av.onmousedown=e=>down(e.clientX); window.onmousemove=e=>move(e.clientX); window.onmouseup=up;
     av.ontouchstart=e=>down(e.touches[0].clientX); av.ontouchmove=e=>{move(e.touches[0].clientX);e.preventDefault();}; av.ontouchend=up;
   }
