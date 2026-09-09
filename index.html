@@ -106,6 +106,18 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 .miccap{ position:absolute; top:calc(max(16px,env(safe-area-inset-top)) + 60px); right:16px; z-index:15; max-width:60%; text-align:right; color:#fff; font-size:14px; text-shadow:0 1px 6px #000; opacity:0; transition:opacity .2s }
 .miccap.show{ opacity:1 }
 
+/* intake form + profiles + daily plan */
+.row2{ display:flex; gap:10px } .row2>label{ flex:1 }
+.inline{ display:flex; gap:6px } .inline input{ flex:1 }
+.pcard{ display:flex; align-items:center; gap:10px; background:var(--panel); border-radius:14px; padding:14px; margin-top:10px; border:1px solid var(--line) }
+.pcard.on{ border-color:var(--amber) }
+.pc-main{ flex:1 } .pc-main b{ display:block } .pc-main small{ color:var(--dim) }
+.pc-del{ background:none; border:0; color:var(--dim); font-size:18px; padding:8px }
+.daytabs{ display:flex; gap:6px; overflow:auto; margin:12px 0; padding-bottom:4px }
+.daytabs button{ flex:0 0 auto; background:var(--panel); color:var(--dim); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font:inherit; font-size:14px }
+.daytabs button.on{ background:var(--amber); color:#1a1200; border-color:var(--amber) }
+
+
 
 
 </style>
@@ -117,6 +129,7 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
  <button data-tab="assess"><svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/><circle cx="12" cy="12" r="3"/></svg>Assess</button>
  <button data-tab="plan"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Plan</button>
  <button data-tab="posture"><svg viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M12 6v8M8 10l4-2 4 2M12 14l-3 7M12 14l3 7"/></svg>Posture</button>
+ <button data-tab="profiles"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Me</button>
  <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Settings</button>
 </nav>
 
@@ -130,11 +143,28 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 <script type="module">
 import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-/* ---------------- storage ---------------- */
-const DB = 'motioniq.v1';
-const S = JSON.parse(localStorage.getItem(DB) || 'null') || { profile:{voice:true}, sessions:[], posture:[], plan:null, badges:[], done:{} };
-const save = () => localStorage.setItem(DB, JSON.stringify(S));
-const age = () => S.profile.birth ? Math.floor((Date.now()-new Date(S.profile.birth))/31557600000) : null;
+/* ---------------- storage (multi-profile, on-device) ---------------- */
+const DB = 'motioniq.v2';
+const ROOT = loadRoot();
+function loadRoot(){
+  let r = JSON.parse(localStorage.getItem(DB) || 'null');
+  if (!r){
+    // migrate a v1 single-profile store if present
+    const old = JSON.parse(localStorage.getItem('motioniq.v1') || 'null');
+    if (old){ old.profile = old.profile||{voice:true}; old.id='p'+Date.now(); r = { profiles:[old], activeId:old.id }; }
+    else r = { profiles:[], activeId:null };
+    localStorage.setItem(DB, JSON.stringify(r));
+  }
+  return r;
+}
+function blankProfile(info){ return { id:'p'+Date.now()+Math.floor(Math.random()*999), profile:{ voice:true, ...info }, sessions:[], posture:[], plan:null, badges:[], done:{}, streak:{} }; }
+// S points at the ACTIVE profile object; all existing code uses S.* unchanged.
+let S = ROOT.profiles.find(p=>p.id===ROOT.activeId) || ROOT.profiles[0] || null;
+const save = () => localStorage.setItem(DB, JSON.stringify(ROOT));
+const age = () => S?.profile.birth ? Math.floor((Date.now()-new Date(S.profile.birth))/31557600000) : null;
+function switchProfile(id){ ROOT.activeId=id; S=ROOT.profiles.find(p=>p.id===id); save(); voice.stop?.(); show('home'); }
+function addProfile(info){ const p=blankProfile(info); ROOT.profiles.push(p); ROOT.activeId=p.id; S=p; save(); return p; }
+function deleteProfile(id){ ROOT.profiles=ROOT.profiles.filter(p=>p.id!==id); if(ROOT.activeId===id){ ROOT.activeId=ROOT.profiles[0]?.id||null; S=ROOT.profiles[0]||null; } save(); }
 
 /* ---------------- voice ---------------- */
 const voice = (() => {
@@ -345,6 +375,43 @@ function endurance(h) { // manual entries from Settings
   if (!p.length) return null; const w=p.reduce((a,b)=>a+b[1],0); return p.reduce((a,b)=>a+b[0]*b[1],0)/w;
 }
 
+
+/* ---------------- comprehensive daily plan ---------------- */
+const DAY_FOCUS = ['Lower-body strength & mobility','Balance & control','Upper-body & posture','Active recovery & flexibility','Full-body strength','Endurance & mobility','Rest & restore'];
+const WARMUPS=['march','armCircles','hipCircles','bodySquat'], COOLDOWNS=['fwdFold','childPose','neckRoll','boxBreath'];
+// Build 7 structured days from the deficit list. Each day = {focus, blocks:[{title,items:[keys]}]}.
+function dailyStructure(sub){
+  const base = weeklyPlan(sub);           // deficit-driven keys per day (existing logic)
+  const byArea = k => (EX[k]?.a)||'other';
+  return base.map((keys,i)=>{
+    const focus = DAY_FOCUS[i];
+    const strength = keys.filter(k=>byArea(k)==='strength');
+    const balance  = keys.filter(k=>byArea(k)==='balance');
+    const mobility = keys.filter(k=>['ankles','thoracic','hips','spine','shoulders'].includes(byArea(k)));
+    const posture  = keys.filter(k=>byArea(k)==='posture');
+    const cardio   = keys.filter(k=>byArea(k)==='endurance');
+    const blocks=[];
+    if (i!==6){
+      blocks.push({title:'Warm-up (3–4 min)', items:WARMUPS.slice(0,3)});
+      if (mobility.length) blocks.push({title:'Mobility focus', items:mobility});
+      if (strength.length) blocks.push({title:'Strength', items:strength});
+      if (balance.length)  blocks.push({title:'Balance', items:balance});
+      if (posture.length)  blocks.push({title:'Posture', items:posture});
+      if (cardio.length || i===5) blocks.push({title:'Endurance', items:cardio.length?cardio:['brisk']});
+      blocks.push({title:'Cool-down (3–4 min)', items:COOLDOWNS.slice(0,3)});
+    } else {
+      blocks.push({title:'Restore', items:['childPose','fwdFold','boxBreath','neckRoll']});
+    }
+    // de-dupe keys within a day
+    const seen=new Set();
+    blocks.forEach(b=>b.items=b.items.filter(k=>EX[k] && !seen.has(k) && seen.add(k)));
+    return { focus, blocks, items: blocks.flatMap(b=>b.items) };
+  });
+}
+function dayMinutes(day){ // rough time estimate
+  let s=0; for(const k of day.items){ const e=EX[k]; if(!e)continue; s += e.hold? (e.hold*e.sets/60) : (e.sets*(e.reps||10)*3/60); s += 0.5; } return Math.round(s);
+}
+
 /* ---------------- goal & narration ---------------- */
 function goal(sub) {
   const h=S.sessions, cur=h.at(-1)?.fmi||0, b=band(cur);
@@ -391,6 +458,14 @@ const EX = {
   wall:{n:'Wall slide',a:'shoulders',sets:2,reps:10,cue:'Forearms on the wall, slide up without arching.'},
   chin:{n:'Chin tuck',a:'posture',sets:3,reps:10,cue:'Make a double chin. Hold two seconds.'},
   brisk:{n:'Brisk walk or bike',a:'endurance',sets:1,hold:1500,cue:'Zone two: you can talk but not sing.'},
+  march:{n:'March in place',a:'warmup',sets:1,hold:60,cue:'Lift the knees, swing the arms, get the blood moving.'},
+  armCircles:{n:'Arm circles',a:'warmup',sets:1,reps:10,cue:'Big slow circles forward then back.'},
+  hipCircles:{n:'Hip circles',a:'warmup',sets:1,reps:8,cue:'Hands on hips, draw slow circles.'},
+  bodySquat:{n:'Slow bodyweight squats',a:'warmup',sets:1,reps:8,cue:'Easy range, warm up the knees and hips.'},
+  neckRoll:{n:'Gentle neck rolls',a:'cooldown',sets:1,reps:6,cue:'Slow half-circles, never force it.'},
+  childPose:{n:"Child's pose",a:'cooldown',sets:1,hold:45,cue:'Sink the hips back, breathe into the low back.'},
+  boxBreath:{n:'Box breathing',a:'cooldown',sets:1,hold:60,cue:'In four, hold four, out four, hold four.'},
+  fwdFold:{n:'Standing forward fold',a:'cooldown',sets:1,hold:40,cue:'Soft knees, let the head hang.'},
 };
 function weeklyPlan(s) {
   const pool=[]; const add=(score,keys)=>{ if(score<70) keys.forEach(k=>pool.push([k,70-score])); };
@@ -743,6 +818,7 @@ function drawSpecAvatar(canvas, spec, azDeg){
 
 /* ---------------- assessment flow ---------------- */
 async function runAssessment(){
+  if (!requireProfile()) return;
   voice.warm();
   try { await openCamera(camFacing); } catch(e){ alert('Camera not available: '+e.message+'\nOpen this page over https and allow camera access.'); return; }
   const outcomes={}; let cancelled=false;
@@ -802,7 +878,7 @@ function finishSession(outcomes){
   const sub=subScores(outcomes,end,post), f=fmi(sub), o=overall(sub), mAge=movementAge(o);
   const sess={ date:Date.now(), fmi:f, overall:o, movementAge:mAge, ...sub, tests:outcomes };
   const prev=S.sessions.at(-1); S.sessions.push(sess);
-  S.plan={ weekStart:startOfWeek(), days:weeklyPlan(sub) }; S.done={};
+  S.plan={ weekStart:startOfWeek(), days:weeklyPlan(sub), structure:dailyStructure(sub) }; S.done={};
   const g=goal(sub); const earned=[];
   const has=id=>S.badges.includes(id); if(!has('first')) earned.push('first'); if(sub.bal>=90&&!has('balance')) earned.push('balance'); if(sub.flex>=90&&!has('flex')) earned.push('flex'); if(sub.str>=80&&!has('strength')) earned.push('strength'); if(f>=90&&!has('elite')) earned.push('elite');
   const base=S.sessions.find(s=>s.date<=sess.date-30*86400000); if(base&&f-base.fmi>=5&&!has('improve30')) earned.push('improve30');
@@ -1179,11 +1255,67 @@ async function roomCalibrate(keys){
   });
 }
 
+
+/* ---------------- profiles: gate, intake, picker ---------------- */
+// If no profile exists, force the intake form before anything else.
+function requireProfile(){
+  if (!S){ intakeScreen(); return false; }
+  return true;
+}
+function intakeScreen(existing){
+  const p = existing?.profile || {};
+  view.innerHTML = `<h1>${existing?'Edit profile':'Welcome to Motion IQ'}</h1>
+    <p>${existing?'Update your details.':'Tell us a little about you so scores use the right age and body references. This stays on this device.'}</p>
+    <div class="panel">
+      <div class="row2"><label class="f">First name<input id="fn" value="${p.first||''}" autocomplete="given-name"></label>
+      <label class="f">Last name<input id="ln" value="${p.last||''}" autocomplete="family-name"></label></div>
+      <label class="f">Date of birth<input type="date" id="dob" value="${p.birth||''}"></label>
+      <label class="f">Sex (for age-referenced norms)<select id="sex"><option value="0" ${!p.female?'selected':''}>Male</option><option value="1" ${p.female?'selected':''}>Female</option></select></label>
+      <div class="row2">
+        <label class="f">Height<div class="inline"><input type="number" id="h1" inputmode="decimal" value="${p.heightMain??''}" placeholder="${p.unit==='in'?'ft':'cm'}"><input type="number" id="h2" inputmode="decimal" value="${p.heightIn??''}" placeholder="in" style="${p.unit==='in'?'':'display:none'}"></div></label>
+        <label class="f">Weight<input type="number" id="wt" inputmode="decimal" value="${p.weight??''}" placeholder="${p.unit==='in'?'lb':'kg'}"></label>
+      </div>
+      <label class="f">Units<select id="unit"><option value="cm" ${p.unit!=='in'?'selected':''}>Metric (cm / kg)</option><option value="in" ${p.unit==='in'?'selected':''}>Imperial (ft-in / lb)</option></select></label>
+    </div>
+    <button class="btn" id="save">${existing?'Save':'Create profile & continue'}</button>
+    ${existing?'':'<p class="tip">You can add more people later from the profile menu — everyone gets their own scores and history on this device.</p>'}`;
+  const unitSel=view.querySelector('#unit'), h2=view.querySelector('#h2');
+  unitSel.onchange=()=>{ const im=unitSel.value==='in'; h2.style.display=im?'':'none'; view.querySelector('#h1').placeholder=im?'ft':'cm'; view.querySelector('#wt').placeholder=im?'lb':'kg'; };
+  view.querySelector('#save').onclick=()=>{
+    const first=view.querySelector('#fn').value.trim(), last=view.querySelector('#ln').value.trim();
+    const dob=view.querySelector('#dob').value, female=view.querySelector('#sex').value==='1', unit=unitSel.value;
+    const h1=+view.querySelector('#h1').value||null, hin=+view.querySelector('#h2').value||null, wt=+view.querySelector('#wt').value||null;
+    if(!first){ alert('Please enter a first name.'); return; }
+    if(!dob){ alert('Please enter your date of birth — scores use it.'); return; }
+    let heightCm=null; if(unit==='in'){ if(h1) heightCm=Math.round((h1*12+(hin||0))*2.54); } else heightCm=h1;
+    const weightKg = wt==null?null : (unit==='in'? +(wt*0.4536).toFixed(1) : wt);
+    const info={ first, last, birth:dob, female, unit, heightMain:h1, heightIn:hin, weight:wt, heightCm, weightKg, voice:p.voice??true, mic:p.mic };
+    if (existing){ existing.profile={...existing.profile, ...info}; save(); }
+    else { addProfile(info); voice.warm?.(); }
+    show('home');
+  };
+}
+function profilePicker(){
+  view.innerHTML = `<h1>Profiles</h1>
+    ${ROOT.profiles.map(p=>{
+      const a=p.profile.birth?Math.floor((Date.now()-new Date(p.profile.birth))/31557600000):null;
+      const last=p.sessions.at(-1);
+      return `<div class="pcard ${p.id===ROOT.activeId?'on':''}">
+        <div class="pc-main" data-id="${p.id}"><b>${p.profile.first||'Unnamed'} ${p.profile.last||''}</b><small>${a?a+' yrs · ':''}${last?'FMI '+Math.round(last.fmi):'no assessment yet'}</small></div>
+        <button class="pc-del" data-del="${p.id}">✕</button></div>`;
+    }).join('')}
+    <button class="btn" id="add">Add a person</button>`;
+  view.querySelectorAll('.pc-main').forEach(el=>el.onclick=()=>switchProfile(el.dataset.id));
+  view.querySelectorAll('.pc-del').forEach(el=>el.onclick=()=>{ const id=el.dataset.del; const p=ROOT.profiles.find(x=>x.id===id); if(confirm(`Delete ${p.profile.first||'this profile'} and all their data?`)){ deleteProfile(id); if(!S) intakeScreen(); else show('settings'); } });
+  view.querySelector('#add').onclick=()=>intakeScreen();
+}
+
 /* ---------------- views ---------------- */
 const view=document.getElementById('view');
 function show(tab){
+  if (!S && tab!=='profiles'){ intakeScreen(); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('on')); return; }
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
-  ({home,assess,plan,posture,settings})[tab]();
+  ({home,assess,plan,posture,settings,profiles:profilePicker})[tab]?.();
 }
 function chart(canvas, series, range){
   const cutoff=Date.now()-range*86400000, data=S.sessions.filter(s=>s.date>=cutoff); const c=canvas.getContext('2d'); const W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
@@ -1195,10 +1327,10 @@ function chart(canvas, series, range){
 }
 function home(){
   const s=S.sessions.at(-1);
-  if (!s){ view.innerHTML=`<h1>Motion IQ</h1><div class="empty"><p class="ink" style="font-size:20px">No assessment yet</p><p>Prop your phone up, step back, and the coach will guide you by voice through ten short tests.</p><button class="btn" id="go">Start first assessment</button></div>`; view.querySelector('#go').onclick=runAssessment; return; }
+  if (!s){ view.innerHTML=`<h1>Hi ${S.profile.first||''} 👋</h1><div class="empty"><p class="ink" style="font-size:20px">No assessment yet</p><p>Prop your phone up, step back, and the coach will guide you by voice through ten short tests.</p><button class="btn" id="go">Start first assessment</button></div>`; view.querySelector('#go').onclick=runAssessment; return; }
   const g=goal(s), p=S.posture.at(-1);
   const gm=new Date(s.date).toLocaleDateString(undefined,{month:'short',day:'numeric'});
-  view.innerHTML=`<h1>Motion IQ</h1>
+  view.innerHTML=`<h1>Hi ${S.profile.first||''} 👋</h1>
    <div class="panel"><p>Farmaha Mobility Index · ${gm}</p><div class="big">${Math.round(s.fmi)}</div><div class="band">${g.band}</div>
    <p style="margin-top:8px">Movement age ${s.movementAge} (estimate)${g.eliteDate?` · on track for Elite by ${g.eliteDate.toLocaleDateString(undefined,{month:'short',year:'numeric'})}`:g.band!=='Elite'?` · ${Math.round(g.toElite)} points to Elite. Focus: ${g.weak}`:''}</p></div>
    <div class="grid">${[['Movement',s.overall],['Flexibility',s.flex],['Mobility',s.mob],['Balance',s.bal],['Strength',s.str],['Endurance',s.end],['Posture',p?.score]].map(([n,v])=>`<div class="stat"><b>${v==null?'–':Math.round(v)}</b><span>${n}${v==null?' (no data)':''}</span></div>`).join('')}</div>
@@ -1229,12 +1361,26 @@ function assess(){
   view.querySelector('#go').onclick=runAssessment;
 }
 function plan(){
-  if (!S.plan){ view.innerHTML=`<h1>Weekly plan</h1><div class="empty"><p class="ink" style="font-size:20px">No plan yet</p><p>Complete an assessment and your first week is generated from what needs work.</p></div>`; return; }
-  const d=todayIdx(), names=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  view.innerHTML=`<h1>Weekly plan</h1><div class="panel"><p>Plan completion this week</p><div class="big" style="font-size:44px">${Math.round(planAdherence()*100)}%</div></div>
-  ${S.plan.days.map((keys,i)=>`<h2>${i===d?'Today':names[i]}</h2>${keys.map(k=>{const e=EX[k];const done=S.done[i]?.includes(k);return `<div class="ex"><input type="checkbox" data-d="${i}" data-k="${k}" ${done?'checked':''}><div>${e.n}<small>${e.sets} × ${e.reps?e.reps+' reps':e.hold+' s'}${e.side?' each side':''} · ${e.a}</small></div></div>`;}).join('')}${i===d&&keys.length?`<button class="btn" id="guide">Start guided session</button>`:''}`).join('')}`;
-  view.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{ const i=+c.dataset.d,k=c.dataset.k; S.done[i]=S.done[i]||[]; if(c.checked){ if(!S.done[i].includes(k)) S.done[i].push(k); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; } else S.done[i]=S.done[i].filter(x=>x!==k); save(); });
-  view.querySelector('#guide')?.addEventListener('click',async ()=>{ const keys=S.plan.days[d]; const rc=await roomCalibrate(keys); if(rc.note){ voice.say(rc.note); } if(rc.ok!==false){ guided(keys); } else { alert(rc.note); show('plan'); } });
+  if (!S.plan){ view.innerHTML=`<h1>Daily plan</h1><div class="empty"><p class="ink" style="font-size:20px">No plan yet</p><p>Complete an assessment and Motion IQ builds a full 7-day plan from what needs work.</p><button class="btn" id="go">Start assessment</button></div>`; view.querySelector('#go').onclick=runAssessment; return; }
+  const struct = S.plan.structure || dailyStructure(S.sessions.at(-1)?.subScores? S.sessions.at(-1) : {reg:{},flex:60,mob:60,bal:60,str:60});
+  const d=todayIdx(), names=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const [selDay,setSel]=[window.__planDay??d, v=>window.__planDay=v];
+  const day = struct[selDay] || {focus:'',blocks:[],items:[]};
+  const doneCount = (S.done[selDay]||[]).length, total=day.items.length;
+  view.innerHTML=`<h1>Daily plan</h1>
+    <div class="panel"><p>This week</p><div class="big" style="font-size:40px">${Math.round(planAdherence()*100)}%</div><p class="tip">Completed across the days so far</p></div>
+    <div class="daytabs">${struct.map((_,i)=>`<button data-i="${i}" class="${i===selDay?'on':''}">${names[i].slice(0,3)}${i===d?'•':''}</button>`).join('')}</div>
+    <div class="panel">
+      <p class="lbl">${selDay===d?'Today':names[selDay]} · focus</p>
+      <h2 style="margin-top:2px">${day.focus}</h2>
+      <p class="tip">${day.items.length} exercises · about ${dayMinutes(day)} min · ${doneCount}/${total} done</p>
+    </div>
+    ${day.blocks.map(b=>`<h2>${b.title}</h2>${b.items.map(k=>{const e=EX[k];const done=(S.done[selDay]||[]).includes(k);return `<div class="ex"><input type="checkbox" data-k="${k}" ${done?'checked':''}><div>${e.n}<small>${e.sets>1?e.sets+' × ':''}${e.reps?e.reps+' reps':e.hold+' s'}${e.side?' each side':''} — ${e.cue}</small></div></div>`;}).join('')}`).join('')}
+    ${day.items.length?`<button class="btn" id="guide">Start guided session</button>`:''}
+    <p class="tip">The guided session coaches you through the strength, balance and mobility work by voice. Warm-up and cool-down you do on your own following the cues above.</p>`;
+  view.querySelectorAll('.daytabs button').forEach(b=>b.onclick=()=>{ setSel(+b.dataset.i); plan(); });
+  view.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{ const k=c.dataset.k; S.done[selDay]=S.done[selDay]||[]; if(c.checked){ if(!S.done[selDay].includes(k)) S.done[selDay].push(k); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; } else S.done[selDay]=S.done[selDay].filter(x=>x!==k); save(); });
+  view.querySelector('#guide')?.addEventListener('click',async ()=>{ const keys=(struct[selDay].blocks.filter(b=>!/Warm-up|Cool-down|Restore/.test(b.title)).flatMap(b=>b.items)); if(!keys.length){ alert('This is a recovery day — follow the cues at your own pace.'); return; } const rc=await roomCalibrate(keys); if(rc.note){ voice.say(rc.note); } if(rc.ok!==false){ guided(keys); } else { alert(rc.note); show('plan'); } });
 }
 function posture(){
   const p=S.posture.at(-1);
@@ -1243,10 +1389,13 @@ function posture(){
   view.querySelector('#go').onclick=runPosture;
 }
 function settings(){
-  const h=S.profile.health||{};
+  const h=S.profile.health||{}, p=S.profile;
+  const a=age(), ht=p.heightCm?(p.unit==='in'?`${p.heightMain||''}'${p.heightIn||0}"`:`${p.heightCm} cm`):'—', wt=p.weight?(p.unit==='in'?`${p.weight} lb`:`${p.weight} kg`):'—';
   view.innerHTML=`<h1>Settings</h1>
-  <label class="f">Birth date (for age-referenced norms)<input type="date" id="birth" value="${S.profile.birth||''}"></label>
-  <label class="f">Reference norms<select id="sex"><option value="0" ${!S.profile.female?'selected':''}>Male</option><option value="1" ${S.profile.female?'selected':''}>Female</option></select></label>
+  <div class="panel"><p class="lbl">Current profile</p><b style="font-size:19px">${p.first||'Unnamed'} ${p.last||''}</b>
+    <p class="tip">${a?a+' yrs · ':''}${ht} · ${wt}${ROOT.profiles.length>1?` · ${ROOT.profiles.length} people on this device`:''}</p>
+    <div class="row"><button class="btn quiet" id="editp">Edit details</button><button class="btn quiet" id="switchp">Switch / add person</button></div>
+  </div>
   <div class="toggle"><span>Voice guidance (spoken coaching)</span><input type="checkbox" id="voice" ${S.profile.voice?'checked':''}></div>
     <div class="toggle"><span>Voice control (say “start”, “pause”…)${listener.supported?'':' — not supported on this browser'}</span><input type="checkbox" id="mic" ${S.profile.mic?'checked':''} ${listener.supported?'':'disabled'}></div>
   <p class="tip">Voice commands during a session: “start”, “pause”, “resume”, “next”, “skip”, “redo”, “flip camera”, “how do I do this”. Tap the mic on the camera screen to start listening. On iPhone, speech is transcribed by Apple (like Siri dictation); leave this off if you prefer nothing leaves the device.</p>
@@ -1261,15 +1410,16 @@ function settings(){
   <button class="btn quiet" id="del" style="color:var(--warn)">Delete all my data</button>
   <p class="tip" style="margin-top:20px">Motion IQ gives wellness estimates from a single phone camera, not medical measurements. Angles are typically within 3–8° in the side plane and less reliable for rotation.</p>`;
   const bind=(id,fn)=>view.querySelector('#'+id).onchange=e=>{fn(e.target);save();};
-  bind('birth',e=>S.profile.birth=e.value); bind('sex',e=>S.profile.female=e.value==='1'); bind('voice',e=>S.profile.voice=e.checked); bind('mic',e=>{S.profile.mic=e.checked; if(!e.checked) listener.off();});
-  for (const k of ['vo2','rhr','mins','steps']) bind(k,e=>{S.profile.health=S.profile.health||{};S.profile.health[k]=+e.value||null;S.profile.health.female=S.profile.female;});
+  view.querySelector('#editp').onclick=()=>intakeScreen(S); view.querySelector('#switchp').onclick=()=>profilePicker();
+  bind('voice',e=>S.profile.voice=e.checked); bind('mic',e=>{S.profile.mic=e.checked; if(!e.checked) listener.off();});
+  for (const k of ['vo2','rhr','mins','steps']) bind(k,e=>{S.profile.health=S.profile.health||{};S.profile.health[k]=+e.value||null;S.profile.health.female=S.profile.female;S.profile.health.age=age();});
   view.querySelector('#exp').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'})); a.download='motioniq-backup.json'; a.click(); };
   view.querySelector('#imp').onclick=()=>view.querySelector('#file').click();
   view.querySelector('#file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const d=JSON.parse(await f.text()); if(!d.sessions){alert('Not a Motion IQ backup.');return;} localStorage.setItem(DB,JSON.stringify(d)); location.reload(); };
   view.querySelector('#del').onclick=()=>{ if(confirm('Delete all sessions, plans and settings on this device?')){ localStorage.removeItem(DB); location.reload(); } };
 }
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.tab));
-show('home');
+if (!S) intakeScreen(); else show('home');
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
     setInterval(() => reg.update(), 60000);               // check for a new version every minute
