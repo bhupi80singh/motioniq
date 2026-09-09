@@ -63,6 +63,32 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 .empty{text-align:center;padding:60px 20px;color:var(--dim)}
 .tip{font-size:14px;color:var(--dim);margin-top:10px}
 @media (prefers-reduced-motion:no-preference){.btn:active{transform:scale(.98)}}
+
+/* split-screen guided workout */
+#cam.split .video, #cam.split #overlay{ }
+#cam.split{ flex-direction:row }
+#coach{ position:absolute; background:rgba(15,27,45,.92); backdrop-filter:blur(8px); overflow:auto; color:var(--ink); z-index:5 }
+/* landscape: coach on the right half */
+@media (orientation:landscape){ #cam.split #coach{ top:0; right:0; width:44%; height:100% } #cam.split video,#cam.split #overlay{ width:56%!important; left:0; right:auto } }
+/* portrait: camera on top ~52%, coach below */
+@media (orientation:portrait){ #cam.split #coach{ left:0; right:0; bottom:0; height:48%; border-top:1px solid var(--line) } #cam.split video,#cam.split #overlay{ height:52%!important; top:0; object-fit:cover } #cam.split #cue{ top:8px; font-size:30px } #cam.split #sub{ top:88px } }
+.coach-scroll{ padding:14px 14px calc(80px + env(safe-area-inset-bottom)) }
+#coach h2{ margin:10px 0 4px; font-size:18px }
+.avatar-wrap{ background:#0c1626; border-radius:14px; padding:8px }
+#coach canvas#av{ width:100%; height:160px; display:block; touch-action:none }
+.av-btns{ display:flex; gap:6px; margin-top:6px }
+.av-btns button{ flex:1; background:var(--line); color:var(--ink); border:0; border-radius:8px; padding:8px 0; font:inherit; font-size:13px }
+.metrics{ margin:10px 0 }
+.mrow{ display:grid; grid-template-columns:1fr auto 12px auto; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid var(--line); font-size:14px }
+.mrow b{ font-weight:600 } .mrow small{ color:var(--dim) } .mrow i{ width:12px; height:12px; border-radius:50% } .mrow .pc{ color:var(--dim); font-size:12px; width:44px; text-align:right }
+.pill{ display:inline-block; background:var(--amber); color:#1a1200; border-radius:999px; padding:4px 12px; font-size:13px; font-weight:600; margin:6px 0 }
+.two{ display:flex; gap:10px; margin-top:8px } .two>div{ flex:1; background:#0c1626; border-radius:10px; padding:10px } .two b{ display:block; font-size:15px; margin-top:2px }
+.lbl{ color:var(--dim); font-size:12px } #coach ul{ margin:4px 0 0 16px; color:var(--dim); font-size:13px } #coach li{ margin:2px 0 }
+/* room calibration diagram */
+.roomcal{ background:var(--panel); border-radius:14px; padding:16px; margin-top:12px }
+.roommeter{ height:14px; border-radius:7px; background:linear-gradient(90deg,#FF6B6B,#FFB020,#3DDC97); position:relative; margin:10px 0 }
+.roommeter i{ position:absolute; top:-4px; width:6px; height:22px; background:#fff; border-radius:3px; transform:translateX(-50%) }
+
 </style>
 </head>
 <body>
@@ -294,6 +320,68 @@ function weeklyPlan(s) {
 }
 const BADGES=[['first','First assessment'],['improve30','30-day improvement'],['balance','Balance master'],['flex','Flexibility elite'],['strength','Strength milestone'],['elite','Elite']];
 
+
+/* ---------------- exercise form specs (the PT knowledge) ---------------- */
+// Each check: read a value from angles(p)/pose, compare to [okLow,okHigh];
+// outside warn band -> yellow, outside bad band -> red. `cue` is spoken, `why` explains.
+const FORM = {
+  bridge: { muscles:'Glutes, hamstrings, core', breath:'Exhale as you lift, inhale as you lower',
+    mistakes:['Arching the lower back instead of squeezing glutes','Pushing through the toes instead of the heels','Letting the hips sag at the top'],
+    repJoint:{get:a=>a.hip.left, down:x=>x>60, up:x=>x<25},
+    checks:[
+      {part:'spine', get:a=>a.trunkLean, ok:[0,12], warn:20, cue:'Keep a straight line from knees to shoulders.', why:'Arching loads the lower back instead of the glutes.', bad:'Excessive arch'},
+      {part:'hips', get:a=>Math.max(a.hip.left,a.hip.right), ok:[0,20], warn:35, cue:'Drive the hips higher.', why:'A full bridge trains the glutes through their whole range.', bad:'Hips too low'},
+    ]},
+  split: { muscles:'Quads, glutes', breath:'Inhale down, exhale up', side:1,
+    mistakes:['Front knee caving inward','Leaning the torso forward','Short, shallow range'],
+    repJoint:{get:(a,s)=>a.knee[s], down:x=>x>70, up:x=>x<20},
+    checks:[
+      {part:'knee', get:(a,s)=>a.valgus[s], ok:[-3,3], warn:6, cue:'Push the front knee out over your toes.', why:'Inward knee travel stresses the joint and wastes force.', bad:'Knee valgus'},
+      {part:'spine', get:a=>a.trunkLean, ok:[0,15], warn:25, cue:'Stay tall through the torso.', why:'Leaning shifts load off the working leg.', bad:'Torso lean'},
+      {part:'knee', get:(a,s)=>a.knee[s], ok:[80,130], warn:60, dir:'low', cue:'Sink a little deeper.', why:'Depth is where the strength gain lives.', bad:'Shallow depth'},
+    ]},
+  stepUp: { muscles:'Quads, glutes', breath:'Exhale up, inhale down', side:1,
+    mistakes:['Pushing off the back foot','Knee collapsing inward','Rushing the descent'],
+    repJoint:{get:(a,s)=>a.knee[s], down:x=>x>50, up:x=>x<20},
+    checks:[{part:'knee', get:(a,s)=>a.valgus[s], ok:[-3,3], warn:6, cue:'Keep the knee over the toes.', why:'Protects the knee and recruits the glute.', bad:'Knee valgus'}]},
+  sls: { muscles:'Ankle stabilizers, glute medius, core', breath:'Slow and even', side:1, hold:1,
+    mistakes:['Hips dropping to one side','Trunk swaying','Holding your breath'],
+    checks:[
+      {part:'spine', get:a=>a.trunkLean, ok:[0,10], warn:18, cue:'Stack your shoulders over your hips.', why:'A level trunk means the stabilizers are doing the work, not momentum.', bad:'Trunk sway'},
+      {part:'hips', get:a=>Math.abs(a.hipTilt), ok:[0,3], warn:6, cue:'Level your hips.', why:'A dropped hip is weak glute medius — exactly what we are training.', bad:'Hip drop'},
+    ]},
+  tree: { muscles:'Balance, hips, core', breath:'Long, slow breaths', side:1, hold:1,
+    mistakes:['Foot pressing on the side of the knee','Hips uneven','Losing a fixed gaze point'],
+    checks:[{part:'spine', get:a=>a.trunkLean, ok:[0,10], warn:18, cue:'Lengthen up through the crown of your head.', why:'A tall spine steadies the whole pose.', bad:'Leaning'}]},
+  openBook: { muscles:'Thoracic spine, chest', breath:'Exhale as you open, inhale back', side:1,
+    mistakes:['Knees separating','Forcing the range','Turning from the lower back'],
+    checks:[]},
+  catCow: { muscles:'Spine mobility', breath:'Inhale to arch, exhale to round',
+    mistakes:['Moving only from the lower back','Rushing','Holding the breath'], checks:[]},
+  tRot: { muscles:'Thoracic rotation', breath:'Exhale as you rotate up', side:1,
+    mistakes:['Rotating from the lumbar spine','Sagging the hips'], checks:[]},
+  hipFlex: { muscles:'Hip flexors', breath:'Breathe slowly into the stretch', side:1, hold:1,
+    mistakes:['Over-arching the back','Leaning forward instead of tucking the pelvis'],
+    checks:[{part:'spine', get:a=>a.trunkLean, ok:[0,15], warn:28, cue:'Tuck the pelvis before you shift forward.', why:'Otherwise you feel it in the back, not the hip flexor.', bad:'Back arch'}]},
+  nn: { muscles:'Hip rotation', breath:'Relaxed', mistakes:['Leaning back','Forcing the range'], checks:[]},
+  floss: { muscles:'Hamstrings, sciatic mobility', breath:'Slow', side:1, mistakes:['Bouncing','Rounding the back'], checks:[]},
+  cars: { muscles:'Shoulder mobility', breath:'Slow and controlled', side:1,
+    mistakes:['Ribs flaring','Rushing the circle'],
+    checks:[{part:'spine', get:a=>a.trunkLean, ok:[0,12], warn:20, cue:'Keep your ribs down.', why:'Flaring the ribs fakes shoulder range from the spine.', bad:'Rib flare'}]},
+  wall: { muscles:'Shoulders, upper back', breath:'Exhale as you slide up',
+    mistakes:['Arching to reach higher','Shrugging the shoulders'],
+    checks:[{part:'shoulders', get:a=>Math.abs(a.shTilt), ok:[0,3], warn:6, cue:'Keep your shoulders even.', why:'Even shoulders mean both sides share the work.', bad:'Uneven shoulders'}]},
+  chin: { muscles:'Deep neck flexors', breath:'Exhale as you tuck',
+    mistakes:['Tipping the head down instead of gliding back','Using the jaw'], checks:[]},
+  brisk: { muscles:'Cardiovascular system', breath:'Rhythmic, conversational pace', mistakes:['Going too hard to sustain'], checks:[] },
+};
+// The six regions we color, and which joints belong to each.
+const REGION_JOINTS = {
+  head:['head'], shoulders:['leftShoulder','rightShoulder'], spine:['neck','spine'],
+  hips:['leftHip','rightHip','pelvis'], knee:['leftKnee','rightKnee'], ankle:['leftAnkle','rightAnkle','leftFoot','rightFoot'],
+  arm:['leftElbow','rightElbow','leftWrist','rightWrist'],
+};
+
 /* ---------------- camera & landmarker ---------------- */
 let landmarker=null, stream=null, rafId=null, onPose=null;
 let camFacing='user';  // 'user' = front/selfie, 'environment' = back
@@ -344,6 +432,34 @@ async function flipCamera(){
 function setCue(t,cls=''){ cue.textContent=t; cue.className=cls; }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
+
+/* ---------------- form evaluation & colored skeleton ---------------- */
+// Returns {region: 'ok'|'warn'|'bad'} and a list of active corrections.
+function evalForm(p, spec){
+  const a = angles(p), status = {}, issues = [];
+  for (const r in REGION_JOINTS) status[r] = 'ok';
+  if (spec) for (const c of (spec.checks||[])){
+    const side = spec.side ? 'left' : null;  // simplification: check the left/front side
+    let v = c.get(a, side); const [lo,hi] = c.ok;
+    let level = 'ok';
+    if (c.dir === 'low'){ if (v < c.warn) level = 'bad'; else if (v < lo) level = 'warn'; }
+    else { const over = Math.max(lo - v, v - hi); if (over > (c.warn - hi)) level = 'bad'; else if (v < lo || v > hi) level = 'warn'; }
+    if (level !== 'ok'){ if (status[c.part] !== 'bad') status[c.part] = level; issues.push({...c, level, v}); }
+  }
+  return { status, issues, a };
+}
+const COLOR = { ok:'#3DDC97', warn:'#FFB020', bad:'#FF6B6B' };
+function drawColored(p, status){
+  const W=overlay.width,H=overlay.height, P=i=>[p.n2d[i].x*W,p.n2d[i].y*H];
+  const jointRegion = {}; for (const r in REGION_JOINTS) for (const j of REGION_JOINTS[r]) jointRegion[j]=r;
+  const MPto = { 0:'head',11:'shoulders',12:'shoulders',13:'arm',14:'arm',15:'arm',16:'arm',23:'hips',24:'hips',25:'knee',26:'knee',27:'ankle',28:'ankle',31:'ankle',32:'ankle' };
+  const col = i => COLOR[status[MPto[i]] || 'ok'] || '#fff';
+  const pairs=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,31],[24,26],[26,28],[28,32]];
+  ctx.lineWidth=6; ctx.lineCap='round';
+  for (const [x,y] of pairs){ const g=ctx.createLinearGradient(...P(x),...P(y)); g.addColorStop(0,col(x)); g.addColorStop(1,col(y)); ctx.strokeStyle=g; ctx.beginPath(); ctx.moveTo(...P(x)); ctx.lineTo(...P(y)); ctx.stroke(); }
+  for (const i of [0,11,12,13,14,15,16,23,24,25,26,27,28]){ const [x,y]=P(i); ctx.fillStyle=col(i); ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill(); }
+}
+
 /* ---------------- calibration ---------------- */
 function calibrate(){ return new Promise(resolve=>{
   setCue('Set up','' ); subEl.textContent='Lean the phone upright at about hip height, then walk back until I can see you head to toe.';
@@ -360,6 +476,28 @@ function calibrate(){ return new Promise(resolve=>{
     still.push(p); if (still.length>1 && p.t-still[0].t>=2000){ onPose=null; setCue("You're set",'good'); subEl.textContent=''; voice.say("You're set. Let's begin.",null,0,'critical'); setTimeout(resolve,1200); }
   };
 });}
+
+
+/* ---------------- smart camera coach ---------------- */
+// Reads how the body fills the frame and returns a positioning verdict.
+// Also decides whether we can see the full body or should drop to upper-body mode.
+function fitVerdict(p){
+  if (!p) return { label:'Step into view', cls:'warn', mode:null };
+  const h = p.box.bottom - p.box.top;               // fraction of frame height the body fills
+  const feetOut = p.box.bottom > 0.985, headOut = p.box.top < 0.015;
+  const lowerVisible = (p.c.leftAnkle>0.5 || p.c.rightAnkle>0.5) && (p.c.leftKnee>0.5 || p.c.rightKnee>0.5);
+  if (headOut) return { label:'Move back — head cut off', cls:'warn', mode:null };
+  if (h > 0.95 || feetOut){
+    // Too tall for the frame. If we still see the upper body well, offer upper-body mode instead of nagging.
+    if (!lowerVisible && (p.c.leftShoulder>0.6 && p.c.rightShoulder>0.6)) return { label:'Small space — upper-body mode', cls:'ok', mode:'upper' };
+    return { label:'Move back 1 step', cls:'warn', mode:null };
+  }
+  if (h < 0.5) return { label:'Move forward slightly', cls:'warn', mode:'full' };
+  if (Math.abs(p.box.cx-0.5) > 0.22) return { label:'Center yourself', cls:'warn', mode:'full' };
+  return { label:'Perfect position', cls:'good', mode:'full' };
+}
+// Lighting proxy: average landmark confidence. Low = poor light / busy background.
+function lightingOK(p){ if(!p) return true; return p.coverage >= 0.6; }
 
 /* ---------------- live coaching ---------------- */
 function makeCoach(id){
@@ -490,27 +628,289 @@ async function runPosture(){
   m.date=Date.now(); m.summary=t; S.posture.push(m); save(); voice.say(t); show('posture');
 }
 
-/* ---------------- guided workout ---------------- */
+
+/* ---------------- reference avatar (rotatable skeleton from ideal angles) ---------------- */
+// Ideal key pose per exercise as target joint angles (degrees). These are the SAME numbers
+// the live form comparison scores against, so the picture never contradicts the feedback.
+const IDEAL = {
+  bridge:{ hipFlex:5, kneeFlex:90, trunkFromFloor:0, arms:20, label:'Top of the bridge' },
+  split:{ hipFlex:60, kneeFlex:90, backKnee:90, trunk:5, arms:10, label:'Bottom of the split squat' },
+  stepUp:{ hipFlex:40, kneeFlex:80, trunk:8, arms:10, label:'Top of the step' },
+  sls:{ hipFlex:10, kneeFlex:15, trunk:0, liftKnee:70, arms:15, label:'Single-leg stance' },
+  tree:{ hipFlex:0, kneeFlex:5, trunk:0, arms:170, footTuck:1, label:'Tree pose' },
+  hipFlex:{ hipFlex:0, kneeFlex:90, trunk:0, arms:170, kneel:1, label:'Half-kneeling stretch' },
+  cars:{ hipFlex:0, kneeFlex:5, trunk:0, arms:90, label:'Mid shoulder circle' },
+  wall:{ hipFlex:0, kneeFlex:5, trunk:0, arms:160, label:'Top of the wall slide' },
+  chin:{ hipFlex:0, kneeFlex:5, trunk:0, arms:0, chinTuck:1, label:'Chin tuck' },
+  openBook:{ hipFlex:90, kneeFlex:90, trunk:0, arms:90, lying:1, label:'Open position' },
+  catCow:{ hipFlex:90, kneeFlex:90, trunk:0, arms:90, quad:1, label:'Cow (arch)' },
+  tRot:{ hipFlex:90, kneeFlex:90, trunk:0, arms:90, quad:1, label:'Rotation up' },
+  nn:{ hipFlex:90, kneeFlex:90, trunk:5, arms:10, seated:1, label:'90/90 seated' },
+  floss:{ hipFlex:70, kneeFlex:10, trunk:0, arms:10, label:'Leg extended' },
+  tandem:{ hipFlex:5, kneeFlex:5, trunk:0, arms:20, label:'Heel-to-toe' },
+  squatHold:{ hipFlex:110, kneeFlex:120, trunk:20, arms:90, label:'Deep squat hold' },
+  calf:{ hipFlex:10, kneeFlex:5, trunk:15, arms:120, label:'Calf stretch' },
+  kneeWall:{ hipFlex:30, kneeFlex:40, trunk:10, arms:30, label:'Knee to wall' },
+  brisk:{ hipFlex:20, kneeFlex:20, trunk:8, arms:40, label:'Walking' },
+};
+// Build a 3D stick figure (metres) from an ideal spec, then rotate by azimuth and project.
+function idealSkeleton(spec){
+  const d2r=x=>x*Math.PI/180, P={};
+  const hipY=0.95, torso=0.55, thigh=0.45, shank=0.45, upper=0.28, fore=0.26;
+  const lean=d2r(spec.trunk||0);
+  P.pelvis=[0,hipY,0];
+  P.spine=[Math.sin(lean)*torso*0.5,hipY+Math.cos(lean)*torso*0.5,0];
+  P.neck=[Math.sin(lean)*torso,hipY+Math.cos(lean)*torso,0];
+  P.head=[Math.sin(lean)*(torso+0.2),hipY+Math.cos(lean)*(torso+0.2),0];
+  const hip=d2r(spec.hipFlex||0), knee=d2r(spec.kneeFlex||0);
+  for (const s of [[-1,'left'],[1,'right']]){
+    const [sx,side]=s, hx=sx*0.1;
+    P[side+'Hip']=[hx,hipY,0];
+    const thighDir=[Math.sin(hip)*0, -Math.cos(hip), -Math.sin(hip)]; // flex swings knee forward (-z)
+    P[side+'Knee']=[hx+thighDir[0]*thigh, hipY+thighDir[1]*thigh, thighDir[2]*thigh];
+    const shankAng=hip-knee;
+    P[side+'Ankle']=[P[side+'Knee'][0], P[side+'Knee'][1]-Math.cos(shankAng)*shank, P[side+'Knee'][2]-Math.sin(shankAng)*shank];
+    P[side+'Foot']=[P[side+'Ankle'][0], P[side+'Ankle'][1]-0.05, P[side+'Ankle'][2]-0.15];
+    P[side+'Shoulder']=[sx*0.2, P.neck[1], P.neck[2]];
+    // Arm raised along a great circle: 0deg = down, 180deg = overhead.
+    const ang=d2r(spec.arms||10), ay=P.neck[1];
+    P[side+'Elbow']=[sx*0.22, ay - Math.cos(ang)*upper, Math.sin(ang)*upper*0.15];
+    P[side+'Wrist']=[sx*0.22, ay - Math.cos(ang)*(upper+fore), Math.sin(ang)*(upper+fore)*0.15];
+  }
+  return P;
+}
+function rotateProject(P, azDeg, W, H){
+  const az=azDeg*Math.PI/180, out={};
+  let ys=[], xs=[];
+  for (const k in P){ const [x,y,z]=P[k]; const rx=x*Math.cos(az)+z*Math.sin(az); out[k]=[rx,y]; xs.push(rx); ys.push(y); }
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const sc=Math.min((W*0.7)/((maxX-minX)||1),(H*0.8)/((maxY-minY)||1));
+  const ox=W/2-((minX+maxX)/2)*sc, oy=H*0.9+minY*sc; // flip Y (screen down)
+  const pix={}; for (const k in out){ pix[k]=[out[k][0]*sc+ox, H*0.95-((out[k][1]-minY)*sc)]; }
+  return pix;
+}
+function renderAvatar(canvas, exKey, azDeg){
+  const spec=IDEAL[exKey]||IDEAL.bridge, c=canvas.getContext('2d');
+  const W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
+  c.clearRect(0,0,W,H);
+  const P=rotateProject(idealSkeleton(spec), azDeg, W, H);
+  const bones=[['head','neck'],['neck','spine'],['spine','pelvis'],['neck','leftShoulder'],['leftShoulder','leftElbow'],['leftElbow','leftWrist'],['neck','rightShoulder'],['rightShoulder','rightElbow'],['rightElbow','rightWrist'],['pelvis','leftHip'],['leftHip','leftKnee'],['leftKnee','leftAnkle'],['leftAnkle','leftFoot'],['pelvis','rightHip'],['rightHip','rightKnee'],['rightKnee','rightAnkle'],['rightAnkle','rightFoot']];
+  c.strokeStyle='#3DDC97'; c.lineWidth=8; c.lineCap='round';
+  for (const [a,b] of bones){ if(!P[a]||!P[b])continue; c.beginPath(); c.moveTo(...P[a]); c.lineTo(...P[b]); c.stroke(); }
+  c.fillStyle='#F2F4F7'; for (const k in P){ c.beginPath(); c.arc(P[k][0],P[k][1],9,0,7); c.fill(); }
+  c.fillStyle='#9AA7BD'; c.font='26px sans-serif'; c.textAlign='center'; c.fillText(spec.label, W/2, H*0.06);
+}
+
+/* ---------------- guided workout: split-screen, hands-free ---------------- */
+const EXKEY = { calf:'calf', kneeWall:'kneeWall', squatHold:'squatHold', bridge:'bridge', split:'split', stepUp:'stepUp',
+  sls:'sls', tandem:'tandem', tree:'tree', openBook:'openBook', catCow:'catCow', tRot:'tRot', hipFlex:'hipFlex',
+  nn:'nn', floss:'floss', cars:'cars', wall:'wall', chin:'chin', brisk:'brisk' };
+
 async function guided(keys){
-  voice.warm(); const list=keys.map(k=>EX[k]); if(!list.length) return;
-  const wrap=document.getElementById('view'); let cancelled=false, tick=null;
-  const render=(h)=>{ wrap.innerHTML=`<h1>Guided session</h1>${h}<button class="btn quiet" id="gx">End session</button>`; wrap.querySelector('#gx').onclick=()=>{cancelled=true;voice.stop();clearInterval(tick);show('plan');}; };
-  voice.say(`Today's session has ${list.length} exercises. First: ${list[0].n}. ${list[0].cue}`); await sleep(4000);
-  for (let i=0;i<list.length&&!cancelled;i++){
-    const e=list[i]; if(i>0){ voice.say(`Next: ${e.n}. ${e.cue}`); await sleep(5000); }
-    for (let s=1;s<=e.sets&&!cancelled;s++){
-      for (const side of (e.side?['left','right']:[null])){
-        if (cancelled) break; const st=side?` ${side} side`:'';
-        if (e.hold){ voice.say(`Set ${s}${st}. Hold for ${e.hold} seconds. Go.`); let left=e.hold;
-          await new Promise(r=>{ render(`<div class="panel"><p>${e.n}${st}</p><div class="big" id="n">${left}</div><p>${e.cue}</p></div>`); tick=setInterval(()=>{ left--; document.getElementById('n').textContent=left; if(left===Math.floor(e.hold/2)) voice.say('Halfway. Breathe.',null,0,'low'); if(left===5) voice.say('Five more seconds.'); if(left<=0||cancelled){clearInterval(tick);r();} },1000); });
-        } else { voice.say(`Set ${s}${st}. ${e.reps} reps. Tap each rep.`); let done=0;
-          await new Promise(r=>{ render(`<div class="panel"><p>${e.n}${st}</p><div class="big" id="n">0 / ${e.reps}</div><p>${e.cue}</p><button class="btn" id="rep">Count rep</button></div>`); document.getElementById('rep').onclick=()=>{ done++; document.getElementById('n').textContent=`${done} / ${e.reps}`; voice.say(String(done),null,0,'low'); if(done>=e.reps) r(); }; const w=setInterval(()=>{ if(cancelled){clearInterval(w);r();} },300); });
+  voice.warm();
+  const list = keys.map(k=>({key:k, ...EX[k], spec:FORM[k]||{}}));
+  if (!list.length) return;
+  try { await openCamera(camFacing); } catch(e){ alert('Camera not available: '+e.message); show('plan'); return; }
+
+  // Build the split-screen shell over the camera view.
+  const cam = document.getElementById('cam');
+  const panel = document.createElement('div'); panel.id='coach'; cam.appendChild(panel);
+  cam.classList.add('split');
+  camctl.innerHTML = '<button class="btn quiet" id="gx">End</button><button class="btn quiet" id="gflip">Flip</button><button class="btn quiet" id="gskip">Skip</button>';
+  let cancelled=false, skip=false;
+  document.getElementById('gx').onclick=()=>{ cancelled=true; };
+  document.getElementById('gflip').onclick=flipCamera;
+  document.getElementById('gskip').onclick=()=>{ skip=true; };
+
+  let az = 30, dragging=false, lastX=0;   // avatar azimuth
+  const cleanup = () => { closeCamera(); cam.classList.remove('split'); panel.remove(); };
+
+  for (let i=0; i<list.length && !cancelled; i++){
+    const e = list[i]; skip=false;
+    const sides = e.side ? ['left','right'] : [null];
+    for (let s=1; s<=e.sets && !cancelled && !skip; s++){
+      for (const side of sides){
+        if (cancelled||skip) break;
+        renderPanel(e, {set:s, sets:e.sets, side, phase:'get ready'});
+        voice.say(`${e.n}${side?', '+side+' side':''}. Set ${s}. ${e.cue}`, 'ex.intro.'+i+'.'+s, 30);
+
+        // ---- hands-free auto-start: wait until in position & stable ~2.5 s ----
+        await autoStart(e, () => cancelled||skip);
+        if (cancelled||skip) break;
+
+        if (e.hold){
+          await runHold(e, side, s, () => cancelled||skip);
+        } else {
+          await runReps(e, side, s, () => cancelled||skip);
         }
       }
-      if (s<e.sets&&!cancelled){ voice.say(`Set ${s} done. Rest 30 seconds.`); let left=30; await new Promise(r=>{ render(`<div class="panel"><p>Rest</p><div class="big" id="n">${left}</div></div>`); tick=setInterval(()=>{ left--; document.getElementById('n').textContent=left; if(left<=0||cancelled){clearInterval(tick);r();} },1000); }); }
+      if (s<e.sets && !cancelled && !skip){
+        voice.say('Rest thirty seconds.'); await rest(30, ()=>cancelled||skip);
+      }
     }
+    if (!cancelled && !skip){ markDone(e.key); }
   }
-  if (!cancelled){ voice.say('Session complete. Every day you do this moves your score. See you tomorrow.'); const d=todayIdx(); S.done[d]=keys.slice(); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; save(); render('<div class="panel"><div class="big">Done</div><p>Every session moves the score.</p></div>'); }
+  if (!cancelled){ voice.say('Session complete. Every day you do this moves your score. See you tomorrow.'); recordStreak(); }
+  cleanup(); show(cancelled?'plan':'home');
+
+  // ---- panel renderer (right side / bottom in portrait) ----
+  function renderPanel(e, st){
+    const m=e.spec.mistakes||[];
+    panel.innerHTML = `
+      <div class="coach-scroll">
+        <div class="avatar-wrap">
+          <canvas id="av"></canvas>
+          <div class="av-btns">
+            <button data-a="0">Front</button><button data-a="90">Side</button><button data-a="180">Rear</button><button data-a="45">45°</button>
+          </div>
+          <p class="tip">Drag the figure to rotate</p>
+        </div>
+        <h2>${e.n}</h2>
+        <p class="ink">${e.cue}</p>
+        <div class="metrics" id="metrics"></div>
+        <div class="pill">${st.phase||''}${st.side?' · '+st.side:''} · set ${st.set}/${st.sets}</div>
+        <div class="two"><div><span class="lbl">Reps/Time</span><b id="rt">–</b></div><div><span class="lbl">Muscles</span><b>${e.spec.muscles||'—'}</b></div></div>
+        <p class="lbl" style="margin-top:10px">Breathing</p><p>${e.spec.breath||'Breathe steadily.'}</p>
+        ${m.length?`<p class="lbl" style="margin-top:10px">Avoid</p><ul>${m.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}
+      </div>`;
+    const av=panel.querySelector('#av');
+    const paint=()=>renderAvatar(av, EXKEY[e.key]||'bridge', az);
+    paint();
+    panel.querySelectorAll('.av-btns button').forEach(b=>b.onclick=()=>{ az=+b.dataset.a; paint(); });
+    const down=x=>{dragging=true;lastX=x;}, move=x=>{ if(dragging){ az=(az+(x-lastX))%360; lastX=x; paint(); } }, up=()=>dragging=false;
+    av.onmousedown=e=>down(e.clientX); window.onmousemove=e=>move(e.clientX); window.onmouseup=up;
+    av.ontouchstart=e=>down(e.touches[0].clientX); av.ontouchmove=e=>{move(e.touches[0].clientX);e.preventDefault();}; av.ontouchend=up;
+  }
+  function updateMetrics(fm, e, side){
+    const box=panel.querySelector('#metrics'); if(!box) return;
+    const spec=IDEAL[EXKEY[e.key]]||{}, a=fm.a;
+    const rows=[];
+    if (spec.hipFlex!=null){ const cur=Math.max(a.hip.left,a.hip.right); rows.push(cmpRow('Hip flexion', cur, spec.hipFlex)); }
+    if (spec.kneeFlex!=null){ const cur=(a.knee.left+a.knee.right)/2; rows.push(cmpRow('Knee flexion', cur, spec.kneeFlex)); }
+    if (spec.arms!=null){ rows.push(cmpRow('Shoulder', (a.sh.left+a.sh.right)/2, spec.arms)); }
+    // symmetry
+    rows.push(symRow('Shoulder L/R', a.sh.left, a.sh.right));
+    rows.push(symRow('Knee L/R', a.knee.left, a.knee.right));
+    box.innerHTML = rows.join('');
+  }
+  function cmpRow(name, cur, target){
+    const pct=Math.round(Math.min(100,(cur/target)*100)), dev=Math.round(cur-target);
+    const col = Math.abs(dev)<=8?'#3DDC97':Math.abs(dev)<=18?'#FFB020':'#FF6B6B';
+    return `<div class="mrow"><span>${name}</span><b>${Math.round(cur)}° <small>/ ${target}°</small></b><i style="background:${col}"></i><span class="pc">${pct}%</span></div>`;
+  }
+  function symRow(name, l, r){
+    const diff=Math.round(Math.abs(l-r)), col=diff<=8?'#3DDC97':diff<=18?'#FFB020':'#FF6B6B';
+    return `<div class="mrow"><span>${name}</span><b>${Math.round(l)}° · ${Math.round(r)}°</b><i style="background:${col}"></i><span class="pc">Δ${diff}°</span></div>`;
+  }
+
+  // ---- auto-start: hold in position & stable, then countdown ----
+  async function autoStart(e, abort){
+    setCue('Get into position'); 
+    let stableSince=null, ok=false;
+    await new Promise(res=>{
+      onPose = p => {
+        drawFrame(p, e, null);
+        const v = fitVerdict(p);
+        if (!lightingOK(p)) { setCue('More light needed','warn'); voice.say('The room is a little dark — I am losing track of you.','light',8); stableSince=null; return; }
+        if (!p || (v.mode==='full' && v.cls!=='good')) { setCue(v.label, v.cls==='good'?'good':'warn'); stableSince=null; return; }
+        // stable = low motion for 2.5 s
+        const moved = motionSince(p);
+        if (moved < 0.02){ if(!stableSince) stableSince=p.t; if(p.t-stableSince>2500 && !ok){ ok=true; res(); } setCue('Hold…','good'); }
+        else { stableSince=null; setCue('Ready when you are',''); }
+      };
+      const t=setInterval(()=>{ if(abort()){ clearInterval(t); res(); } },200);
+    });
+    if (abort()) return;
+    for (const n of [3,2,1]){ if(abort())return; countEl.textContent=n; voice.say(String(n),null,0,'critical'); await sleep(800); }
+    countEl.textContent=''; voice.say('Go.',null,0,'critical');
+  }
+
+  // ---- rep-based set with live form coaching + auto-count + auto-pause ----
+  async function runReps(e, side, setNo, abort){
+    let reps=0, inRep=false, awayT=0, done=false;
+    const target=e.reps||10, rj=e.spec.repJoint;
+    const rt=()=>{ const el=panel.querySelector('#rt'); if(el) el.textContent=`${reps} / ${target}`; };
+    await new Promise(res=>{
+      onPose = p => {
+        if (!p){ awayT+=33; if(awayT>1500){ setCue('Paused — come back','warn'); voice.say('Paused. Come back into view.','pause',6); } return; }
+        awayT=0;
+        const fm = evalForm(p, e.spec);
+        drawColored(p, fm.status); drawFrame(p, e, fm, true);
+        updateMetrics(fm, e, side);
+        // speak the single most important active correction
+        speakCorrection(fm);
+        if (rj){ const s=side||'left', v=rj.get(fm.a, s);
+          if (rj.down(v) && !inRep) inRep=true;
+          if (rj.up(v) && inRep){ inRep=false; reps++; rt(); voice.say(String(reps), null,0,'low');
+            if (fm.issues.length===0) voice.say('Excellent form, keep going.','good.'+reps,6,'low');
+            if (reps>=target){ done=true; res(); } }
+        }
+      };
+      const t=setInterval(()=>{ if(abort()||done){ clearInterval(t); res(); } },200);
+    });
+  }
+  async function runHold(e, side, setNo, abort){
+    let left=e.hold, done=false;
+    const rt=()=>{ const el=panel.querySelector('#rt'); if(el) el.textContent=left+' s'; };
+    onPose = p => { if(!p) return; const fm=evalForm(p,e.spec); drawColored(p,fm.status); drawFrame(p,e,fm,true); updateMetrics(fm,e,side); speakCorrection(fm); };
+    rt();
+    await new Promise(res=>{
+      const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} left--; rt();
+        if(left===Math.floor(e.hold/2)) voice.say('Halfway. Breathe.',null,0,'low');
+        if(left===5) voice.say('Five seconds.');
+        if(left<=0){ clearInterval(t); res(); } },1000);
+    });
+    onPose=null;
+  }
+  async function rest(sec, abort){
+    let left=sec; setCue('Rest','');
+    await new Promise(res=>{ const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} left--; countEl.textContent=left; if(left<=0){clearInterval(t);countEl.textContent='';res();} },1000); });
+  }
+  function drawFrame(p, e, fm){ /* colored skeleton already drawn by caller when fm present */ if(!fm && p){ ctx.clearRect(0,0,overlay.width,overlay.height); draw(p); } }
+  let lastCorr=0;
+  function speakCorrection(fm){
+    if (!fm.issues.length) return;
+    const worst = fm.issues.sort((a,b)=> (b.level==='bad'?1:0)-(a.level==='bad'?1:0))[0];
+    voice.say(worst.cue, 'corr.'+worst.part, 4, worst.level==='bad'?'normal':'low');
+  }
+}
+// motion tracker for stability detection
+let _prevPose=null;
+function motionSince(p){ if(!_prevPose||!p){ _prevPose=p; return 1; } let d=0,n=0; for(const k in p.j){ if(_prevPose.j[k]){ d+=Math.hypot(...sub(p.j[k],_prevPose.j[k])); n++; } } _prevPose=p; return n?d/n:1; }
+function markDone(key){ const d=todayIdx(); S.done[d]=S.done[d]||[]; if(!S.done[d].includes(key)) S.done[d].push(key); save(); }
+function recordStreak(){ S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; save(); }
+
+
+/* ---------------- room calibration ---------------- */
+const FOOTPRINT = { // rough space each movement needs, for guidance only
+  bridge:'floor', openBook:'floor', catCow:'floor', tRot:'floor', nn:'floor', floss:'floor', hipFlex:'floor',
+  chin:'standing-small', cars:'standing-small', wall:'standing-small', calf:'standing-small', kneeWall:'standing-small',
+  sls:'standing', tree:'standing', split:'standing', stepUp:'standing', squatHold:'standing',
+  tandem:'walking', tandemWalk:'walking', brisk:'walking',
+};
+async function roomCalibrate(keys){
+  return new Promise(async resolve=>{
+    let stream2;
+    try { await openCamera(camFacing); } catch(e){ resolve({ok:true, note:'Camera check skipped.'}); return; }
+    camctl.innerHTML='<button class="btn quiet" id="rcx">Skip</button>';
+    let cancelled=false; camctl.querySelector('#rcx').onclick=()=>{cancelled=true;};
+    setCue('Room check','' ); subEl.textContent='Stand where you plan to exercise. I’ll measure your space.';
+    voice.say('Stand where you plan to exercise so I can check you have enough room and light.','rc',20);
+    let samples=[]; const t0=performance.now();
+    await new Promise(r=>{ onPose=p=>{ if(p) samples.push({fill:p.box.bottom-p.box.top, cx:p.box.cx, cov:p.coverage, light:lightingOK(p)}); if(cancelled||performance.now()-t0>4000) r(); }; const iv=setInterval(()=>{if(cancelled){clearInterval(iv);r();}},200); });
+    onPose=null; closeCamera();
+    if (!samples.length){ resolve({ok:false, note:'I could not see you. Improve lighting and try again.'}); return; }
+    const fill=mean(samples.map(s=>s.fill)), light=samples.filter(s=>s.light).length/samples.length>0.6;
+    const needs=[...new Set(keys.map(k=>FOOTPRINT[k]||'standing'))];
+    const fullBody = fill<0.9;         // whole body visible = plenty of depth
+    const adequate = fullBody || !needs.includes('walking');
+    let note;
+    if (!light) note='Add light — a lamp facing you, or face a window. Tracking is unreliable in low light.';
+    else if (!fullBody && needs.includes('walking')) note='Tight for walking drills. Point the camera along the longest wall, or swap to marching in place.';
+    else if (!fullBody) note='Small space is fine for these. Upper-body mode will kick in automatically if your legs leave the frame.';
+    else note='Plenty of room. Camera at hip height, angled to catch you head to toe.';
+    resolve({ok:light, fullBody, note, upperOnly:!fullBody });
+  });
 }
 
 /* ---------------- views ---------------- */
@@ -568,7 +968,7 @@ function plan(){
   view.innerHTML=`<h1>Weekly plan</h1><div class="panel"><p>Plan completion this week</p><div class="big" style="font-size:44px">${Math.round(planAdherence()*100)}%</div></div>
   ${S.plan.days.map((keys,i)=>`<h2>${i===d?'Today':names[i]}</h2>${keys.map(k=>{const e=EX[k];const done=S.done[i]?.includes(k);return `<div class="ex"><input type="checkbox" data-d="${i}" data-k="${k}" ${done?'checked':''}><div>${e.n}<small>${e.sets} × ${e.reps?e.reps+' reps':e.hold+' s'}${e.side?' each side':''} · ${e.a}</small></div></div>`;}).join('')}${i===d&&keys.length?`<button class="btn" id="guide">Start guided session</button>`:''}`).join('')}`;
   view.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{ const i=+c.dataset.d,k=c.dataset.k; S.done[i]=S.done[i]||[]; if(c.checked){ if(!S.done[i].includes(k)) S.done[i].push(k); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; } else S.done[i]=S.done[i].filter(x=>x!==k); save(); });
-  view.querySelector('#guide')?.addEventListener('click',()=>guided(S.plan.days[d]));
+  view.querySelector('#guide')?.addEventListener('click',async ()=>{ const keys=S.plan.days[d]; const rc=await roomCalibrate(keys); if(rc.note){ voice.say(rc.note); } if(rc.ok!==false){ guided(keys); } else { alert(rc.note); show('plan'); } });
 }
 function posture(){
   const p=S.posture.at(-1);
