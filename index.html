@@ -117,6 +117,16 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 .daytabs button{ flex:0 0 auto; background:var(--panel); color:var(--dim); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font:inherit; font-size:14px }
 .daytabs button.on{ background:var(--amber); color:#1a1200; border-color:var(--amber) }
 
+/* exercise library */
+.disc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px }
+.disc{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 12px; text-align:left; color:var(--ink); font:inherit }
+.disc .di{ font-size:26px } .disc b{ display:block; margin-top:6px } .disc small{ color:var(--dim) }
+.exrow{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:8px }
+.exrow b{ display:block } .exrow small{ color:var(--dim) } .chev{ color:var(--dim); font-size:22px }
+.back{ background:none; border:0; color:var(--amber); font:inherit; font-size:15px; padding:6px 0; margin-bottom:4px }
+#exav{ width:100%; height:240px; display:block; background:#0c1626; border-radius:16px; touch-action:none }
+
+
 
 
 
@@ -127,9 +137,9 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 <nav>
  <button data-tab="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg>Home</button>
  <button data-tab="assess"><svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/><circle cx="12" cy="12" r="3"/></svg>Assess</button>
+ <button data-tab="exercises"><svg viewBox="0 0 24 24"><path d="M6 12h12M4 9v6M20 9v6M8 7v10M16 7v10"/></svg>Exercise</button>
  <button data-tab="plan"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Plan</button>
  <button data-tab="posture"><svg viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M12 6v8M8 10l4-2 4 2M12 14l-3 7M12 14l3 7"/></svg>Posture</button>
- <button data-tab="profiles"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Me</button>
  <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Settings</button>
 </nav>
 
@@ -1048,6 +1058,118 @@ const EXKEY = { calf:'calf', kneeWall:'kneeWall', squatHold:'squatHold', bridge:
   sls:'sls', tandem:'tandem', tree:'tree', openBook:'openBook', catCow:'catCow', tRot:'tRot', hipFlex:'hipFlex',
   nn:'nn', floss:'floss', cars:'cars', wall:'wall', chin:'chin', brisk:'brisk' };
 
+const LIBRARY = [
+  {"id":"y_mountain","name":"Mountain Pose","disc":"Yoga","focus":"posture","cue":"Stand tall, crown lifting, weight even through both feet.","muscles":"Postural muscles","breath":"Slow belly breaths","mistakes":["Locking the knees","Shrugging the shoulders"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":45,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_chair","name":"Chair Pose","disc":"Yoga","focus":"strength","cue":"Sit back like into a chair, arms reaching up, weight in the heels.","muscles":"Quads, glutes, shoulders","breath":"Exhale as you sit back","mistakes":["Knees past the toes","Arching the low back"],"ideal":{"hipFlex":60,"kneeFlex":80,"trunk":25,"arms":165},"hold":30,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_tree","name":"Tree Pose","disc":"Yoga","focus":"balance","cue":"Foot to the inner calf or thigh, never the knee. Fix your gaze.","muscles":"Ankle stabilizers, hips, core","breath":"Long steady breaths","mistakes":["Foot on the knee","Hip jutting out"],"ideal":{"hipFlex":5,"kneeFlex":5,"trunk":0,"arms":170},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_warrior1","name":"Warrior I","disc":"Yoga","focus":"strength","cue":"Front knee over the ankle, back heel down, arms overhead.","muscles":"Legs, hips, shoulders","breath":"Breathe steadily","mistakes":["Front knee caving in","Overarching the back"],"ideal":{"hipFlex":55,"kneeFlex":90,"trunk":8,"arms":170},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_warrior2","name":"Warrior II","disc":"Yoga","focus":"strength","cue":"Front knee bent, arms parallel to the floor, gaze over the front hand.","muscles":"Legs, hips, shoulders","breath":"Steady breaths","mistakes":["Front knee inside the ankle","Leaning the torso"],"ideal":{"hipFlex":50,"kneeFlex":90,"trunk":5,"arms":90},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_triangle","name":"Triangle Pose","disc":"Yoga","focus":"flexibility","cue":"Straight legs, hinge sideways, long spine, top arm to the sky.","muscles":"Hamstrings, obliques","breath":"Breathe into the side body","mistakes":["Rounding the spine","Collapsing the chest down"],"ideal":{"hipFlex":70,"kneeFlex":5,"trunk":60,"arms":120},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_sideangle","name":"Extended Side Angle","disc":"Yoga","focus":"flexibility","cue":"Front knee bent, forearm to thigh, top arm reaching over the ear.","muscles":"Legs, side body","breath":"Long breaths","mistakes":["Dumping weight into the arm"],"ideal":{"hipFlex":55,"kneeFlex":90,"trunk":45,"arms":150},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_halfmoon","name":"Half Moon","disc":"Yoga","focus":"balance","cue":"Balance on one leg and one hand, top leg and arm opening.","muscles":"Balance, hips, core","breath":"Even breaths","mistakes":["Collapsing the standing hip"],"ideal":{"hipFlex":30,"kneeFlex":5,"trunk":60,"arms":150},"hold":20,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_eagle","name":"Eagle Pose","disc":"Yoga","focus":"balance","cue":"Wrap the arms and legs, sit low, hold steady.","muscles":"Balance, hips, shoulders","breath":"Slow breaths","mistakes":["Holding the breath","Losing the gaze"],"ideal":{"hipFlex":45,"kneeFlex":70,"trunk":15,"arms":90},"hold":20,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_dancer","name":"Dancer Pose","disc":"Yoga","focus":"balance","cue":"Stand tall, reach one foot back and up, chest lifting.","muscles":"Balance, hip flexors, back","breath":"Steady breaths","mistakes":["Collapsing forward"],"ideal":{"hipFlex":10,"kneeFlex":20,"trunk":10,"arms":160},"hold":20,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_downdog","name":"Downward Dog","disc":"Yoga","focus":"flexibility","cue":"Hips high, heels reaching down, long spine.","muscles":"Hamstrings, calves, shoulders","breath":"Deep breaths","mistakes":["Rounding the back","Locking the elbows"],"ideal":{"hipFlex":90,"kneeFlex":10,"trunk":60,"arms":170},"hold":30,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_cobra","name":"Cobra Pose","disc":"Yoga","focus":"flexibility","cue":"Lift the chest, elbows soft, shoulders down the back.","muscles":"Spinal extensors","breath":"Inhale to lift","mistakes":["Crunching the neck"],"ideal":{"hipFlex":0,"kneeFlex":10,"trunk":0,"arms":20},"hold":20,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_child","name":"Child's Pose","disc":"Yoga","focus":"recovery","cue":"Hips to heels, forehead down, arms long.","muscles":"Low back, hips","breath":"Breathe into the back","mistakes":["Straining the knees"],"ideal":{"hipFlex":120,"kneeFlex":120,"trunk":0,"arms":150},"hold":45,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_seatedfold","name":"Seated Forward Fold","disc":"Yoga","focus":"flexibility","cue":"Long spine, hinge from the hips over straight legs.","muscles":"Hamstrings, back","breath":"Exhale to fold","mistakes":["Rounding hard through the back"],"ideal":{"hipFlex":90,"kneeFlex":5,"trunk":70,"arms":40},"hold":40,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_bridge","name":"Bridge Pose","disc":"Yoga","focus":"strength","cue":"Feet flat, lift the hips, squeeze the glutes.","muscles":"Glutes, hamstrings","breath":"Exhale to lift","mistakes":["Arching from the low back"],"ideal":{"hipFlex":5,"kneeFlex":90,"trunk":0,"arms":15},"hold":30,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"y_pigeon","name":"Pigeon Pose","disc":"Yoga","focus":"flexibility","cue":"Front shin forward, back leg long, sink the hips.","muscles":"Hip rotators, glutes","breath":"Breathe into the hip","mistakes":["Twisting the low back"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":20,"arms":20},"hold":40,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"y_cat","name":"Cat-Cow","disc":"Yoga","focus":"mobility","cue":"On all fours, alternate arching and rounding the spine.","muscles":"Spine mobility","breath":"Inhale arch, exhale round","mistakes":["Moving only the low back"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":0,"arms":90},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"p_hundred","name":"The Hundred","disc":"Pilates","focus":"strength","cue":"Legs up, curl the head and chest, pump the arms.","muscles":"Deep core","breath":"Breathe in for 5, out for 5","mistakes":["Straining the neck","Low back lifting"],"ideal":{"hipFlex":80,"kneeFlex":90,"trunk":20,"arms":10},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"p_rollup","name":"Roll Up","disc":"Pilates","focus":"flexibility","cue":"Roll up one vertebra at a time, reach for the toes.","muscles":"Core, spine","breath":"Exhale to roll up","mistakes":["Yanking up with momentum"],"ideal":{"hipFlex":80,"kneeFlex":5,"trunk":40,"arms":90},"hold":null,"reps":6,"sets":2,"side":0,"variations":{}},
+  {"id":"p_teaser","name":"Teaser","disc":"Pilates","focus":"strength","cue":"Balance on the sit bones, legs and torso in a V.","muscles":"Deep core, hip flexors","breath":"Exhale to lift","mistakes":["Collapsing the chest"],"ideal":{"hipFlex":70,"kneeFlex":10,"trunk":30,"arms":60},"hold":10,"reps":5,"sets":2,"side":0,"variations":{}},
+  {"id":"p_singleleg","name":"Single Leg Stretch","disc":"Pilates","focus":"strength","cue":"Curl up, one knee in, switch legs with control.","muscles":"Core","breath":"Exhale each pull","mistakes":["Low back arching"],"ideal":{"hipFlex":70,"kneeFlex":90,"trunk":25,"arms":10},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"p_crisscross","name":"Criss-Cross","disc":"Pilates","focus":"strength","cue":"Curl up and rotate elbow toward opposite knee.","muscles":"Obliques","breath":"Exhale on the twist","mistakes":["Pulling on the neck"],"ideal":{"hipFlex":70,"kneeFlex":90,"trunk":25,"arms":20},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"p_swan","name":"Swan","disc":"Pilates","focus":"flexibility","cue":"Lengthen and lift the chest, long through the spine.","muscles":"Back extensors","breath":"Inhale to lift","mistakes":["Crunching the neck"],"ideal":{"hipFlex":0,"kneeFlex":10,"trunk":0,"arms":30},"hold":null,"reps":6,"sets":2,"side":0,"variations":{}},
+  {"id":"p_sidekick","name":"Side Kick Series","disc":"Pilates","focus":"strength","cue":"On your side, long body, controlled leg swings.","muscles":"Glute medius, core","breath":"Steady breath","mistakes":["Rocking the torso"],"ideal":{"hipFlex":10,"kneeFlex":10,"trunk":0,"arms":10},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"p_spinestretch","name":"Spine Stretch Forward","disc":"Pilates","focus":"flexibility","cue":"Tall sit, exhale and round forward over straight legs.","muscles":"Spine, hamstrings","breath":"Exhale to fold","mistakes":["Collapsing rather than articulating"],"ideal":{"hipFlex":90,"kneeFlex":5,"trunk":60,"arms":40},"hold":null,"reps":6,"sets":2,"side":0,"variations":{}},
+  {"id":"p_swimming","name":"Swimming","disc":"Pilates","focus":"strength","cue":"On your front, flutter opposite arm and leg.","muscles":"Back, glutes","breath":"Breathe steadily","mistakes":["Overarching the low back"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":150},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"p_legpull","name":"Leg Pull Front","disc":"Pilates","focus":"strength","cue":"Plank position, lift one leg with control.","muscles":"Core, shoulders","breath":"Exhale each lift","mistakes":["Hips sagging"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":null,"reps":8,"sets":2,"side":1,"variations":{}},
+  {"id":"t_commence","name":"Commencing Form","disc":"Tai Chi","focus":"mobility","cue":"Sink slightly, float the arms up and down with the breath.","muscles":"Whole body, breath","breath":"Slow nasal breathing","mistakes":["Rushing the movement"],"ideal":{"hipFlex":15,"kneeFlex":20,"trunk":0,"arms":60},"hold":null,"reps":6,"sets":1,"side":0,"variations":{}},
+  {"id":"t_wardoff","name":"Ward Off","disc":"Tai Chi","focus":"balance","cue":"Shift weight forward, one arm rounded, sink the hips.","muscles":"Legs, core, balance","breath":"Breathe with the shift","mistakes":["Stiff, jerky motion"],"ideal":{"hipFlex":30,"kneeFlex":40,"trunk":5,"arms":60},"hold":null,"reps":6,"sets":1,"side":1,"variations":{}},
+  {"id":"t_rollback","name":"Roll Back","disc":"Tai Chi","focus":"mobility","cue":"Shift back and turn the waist, arms following.","muscles":"Waist, hips","breath":"Exhale on the roll back","mistakes":["Turning only the arms"],"ideal":{"hipFlex":25,"kneeFlex":35,"trunk":8,"arms":50},"hold":null,"reps":6,"sets":1,"side":1,"variations":{}},
+  {"id":"t_press","name":"Press","disc":"Tai Chi","focus":"balance","cue":"Bring the hands together and press forward as you shift.","muscles":"Legs, core","breath":"Exhale to press","mistakes":["Leaning the torso forward"],"ideal":{"hipFlex":30,"kneeFlex":40,"trunk":5,"arms":70},"hold":null,"reps":6,"sets":1,"side":0,"variations":{}},
+  {"id":"t_push","name":"Push","disc":"Tai Chi","focus":"balance","cue":"Sink back, then push forward with soft, even hands.","muscles":"Legs, shoulders","breath":"Breathe with the push","mistakes":["Locking the elbows"],"ideal":{"hipFlex":30,"kneeFlex":40,"trunk":5,"arms":80},"hold":null,"reps":6,"sets":1,"side":0,"variations":{}},
+  {"id":"t_cloudhands","name":"Cloud Hands","disc":"Tai Chi","focus":"coordination","cue":"Shift side to side, hands circling like passing clouds.","muscles":"Waist, coordination","breath":"Slow steady breath","mistakes":["Losing the waist rotation"],"ideal":{"hipFlex":20,"kneeFlex":30,"trunk":0,"arms":80},"hold":null,"reps":8,"sets":1,"side":0,"variations":{}},
+  {"id":"t_goldenrooster","name":"Golden Rooster","disc":"Tai Chi","focus":"balance","cue":"Stand on one leg, lift the opposite knee and hand.","muscles":"Balance","breath":"Calm breath","mistakes":["Wobbling, rushing"],"ideal":{"hipFlex":10,"kneeFlex":5,"trunk":0,"arms":60},"hold":15,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"t_brushknee","name":"Brush Knee","disc":"Tai Chi","focus":"coordination","cue":"Step and push one hand forward while the other brushes past the knee.","muscles":"Legs, coordination","breath":"Breathe with the step","mistakes":["Disconnecting arms from legs"],"ideal":{"hipFlex":35,"kneeFlex":45,"trunk":5,"arms":70},"hold":null,"reps":6,"sets":1,"side":1,"variations":{}},
+  {"id":"m_hipcar","name":"Hip CARs","disc":"Mobility","focus":"hips","cue":"On all fours or standing, draw the biggest slow circle with the hip.","muscles":"Hip joint","breath":"Slow controlled breath","mistakes":["Rushing","Moving the spine instead"],"ideal":{"hipFlex":30,"kneeFlex":60,"trunk":5,"arms":10},"hold":null,"reps":5,"sets":2,"side":1,"variations":{}},
+  {"id":"m_9090","name":"90/90 Hip Switches","disc":"Mobility","focus":"hips","cue":"Seated, knees at 90/90, rotate side to side staying tall.","muscles":"Hip rotators","breath":"Exhale each switch","mistakes":["Leaning back"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":5,"arms":10},"hold":null,"reps":8,"sets":2,"side":0,"variations":{}},
+  {"id":"m_thoracicrot","name":"Quadruped Thoracic Rotation","disc":"Mobility","focus":"spine","cue":"Hand behind head, rotate the elbow up to the ceiling.","muscles":"Thoracic spine","breath":"Exhale as you open","mistakes":["Rotating the low back"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":0,"arms":90},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"m_openbook","name":"Open Book","disc":"Mobility","focus":"spine","cue":"On your side, knees stacked, open the top arm to the floor.","muscles":"Thoracic spine, chest","breath":"Exhale to open","mistakes":["Knees separating"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":0,"arms":90},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"m_anklewall","name":"Knee-to-Wall Ankle","disc":"Mobility","focus":"ankles","cue":"Drive the knee over the toes, heel stays down.","muscles":"Ankle","breath":"Steady breath","mistakes":["Heel lifting"],"ideal":{"hipFlex":30,"kneeFlex":40,"trunk":10,"arms":20},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"m_catcow","name":"Cat-Cow Flow","disc":"Mobility","focus":"spine","cue":"Alternate arching and rounding through the whole spine.","muscles":"Spine","breath":"Inhale arch, exhale round","mistakes":["Moving only one region"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":0,"arms":90},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"m_shouldercar","name":"Shoulder CARs","disc":"Mobility","focus":"shoulders","cue":"Draw a slow huge circle with the arm, ribs down.","muscles":"Shoulder joint","breath":"Slow breath","mistakes":["Rib flare"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":null,"reps":5,"sets":2,"side":1,"variations":{}},
+  {"id":"m_wallslide","name":"Wall Slide","disc":"Mobility","focus":"shoulders","cue":"Forearms on the wall, slide up without arching.","muscles":"Shoulders, upper back","breath":"Exhale to slide up","mistakes":["Arching to reach"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":150},"hold":null,"reps":10,"sets":2,"side":0,"variations":{}},
+  {"id":"m_worldsgreatest","name":"World's Greatest Stretch","disc":"Mobility","focus":"hips","cue":"Lunge, drop the elbow inside the foot, then rotate open.","muscles":"Hips, spine, hamstrings","breath":"Exhale into each phase","mistakes":["Rushing through"],"ideal":{"hipFlex":70,"kneeFlex":90,"trunk":20,"arms":90},"hold":null,"reps":6,"sets":2,"side":1,"variations":{}},
+  {"id":"m_deepsquathold","name":"Deep Squat Hold","disc":"Mobility","focus":"hips","cue":"Sink into a deep squat, heels down, gently pry the knees out.","muscles":"Hips, ankles","breath":"Breathe into the hips","mistakes":["Heels lifting"],"ideal":{"hipFlex":115,"kneeFlex":125,"trunk":20,"arms":90},"hold":30,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"s_squat","name":"Bodyweight Squat","disc":"Strength","focus":"strength","cue":"Sit back and down, knees over toes, chest tall.","muscles":"Quads, glutes","breath":"Inhale down, exhale up","mistakes":["Knees caving","Heels lifting"],"ideal":{"hipFlex":90,"kneeFlex":110,"trunk":20,"arms":20},"hold":null,"reps":12,"sets":3,"side":0,"variations":{}},
+  {"id":"s_lunge","name":"Forward Lunge","disc":"Strength","focus":"strength","cue":"Step forward, both knees to 90, torso tall.","muscles":"Quads, glutes","breath":"Exhale up","mistakes":["Front knee caving","Leaning forward"],"ideal":{"hipFlex":60,"kneeFlex":90,"trunk":5,"arms":10},"hold":null,"reps":8,"sets":3,"side":1,"variations":{}},
+  {"id":"s_bridge","name":"Glute Bridge","disc":"Strength","focus":"strength","cue":"Feet flat, drive the hips up, squeeze the glutes.","muscles":"Glutes, hamstrings","breath":"Exhale to lift","mistakes":["Arching the low back"],"ideal":{"hipFlex":5,"kneeFlex":90,"trunk":0,"arms":15},"hold":null,"reps":12,"sets":3,"side":0,"variations":{}},
+  {"id":"s_pushup","name":"Push-up","disc":"Strength","focus":"strength","cue":"Straight line head to heels, lower with control.","muscles":"Chest, triceps, core","breath":"Inhale down, exhale up","mistakes":["Hips sagging","Flaring the elbows"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":null,"reps":8,"sets":3,"side":0,"variations":{}},
+  {"id":"s_splitsquat","name":"Split Squat","disc":"Strength","focus":"strength","cue":"Torso tall, back knee taps toward the floor.","muscles":"Quads, glutes","breath":"Exhale up","mistakes":["Front knee caving"],"ideal":{"hipFlex":60,"kneeFlex":90,"trunk":5,"arms":10},"hold":null,"reps":8,"sets":3,"side":1,"variations":{}},
+  {"id":"s_stepup","name":"Step-up","disc":"Strength","focus":"strength","cue":"Drive through the whole foot, control the way down.","muscles":"Quads, glutes","breath":"Exhale up","mistakes":["Pushing off the back foot"],"ideal":{"hipFlex":40,"kneeFlex":80,"trunk":8,"arms":10},"hold":null,"reps":10,"sets":3,"side":1,"variations":{}},
+  {"id":"s_plank","name":"Plank","disc":"Strength","focus":"strength","cue":"Straight line, brace the core, breathe.","muscles":"Core, shoulders","breath":"Steady breathing","mistakes":["Hips sagging or piking"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":30,"reps":null,"sets":3,"side":0,"variations":{}},
+  {"id":"s_sidplank","name":"Side Plank","disc":"Strength","focus":"strength","cue":"Stack the body, lift the hips, long line.","muscles":"Obliques, shoulders","breath":"Steady breath","mistakes":["Hips dropping"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":20,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"s_wallsit","name":"Wall Sit","disc":"Strength","focus":"strength","cue":"Slide down to thighs parallel, hold.","muscles":"Quads","breath":"Steady breath","mistakes":["Knees past the toes"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":5,"arms":10},"hold":30,"reps":null,"sets":3,"side":0,"variations":{}},
+  {"id":"s_calfraise","name":"Calf Raise","disc":"Strength","focus":"strength","cue":"Rise onto the toes, control down.","muscles":"Calves","breath":"Exhale up","mistakes":["Bouncing"],"ideal":{"hipFlex":2,"kneeFlex":5,"trunk":0,"arms":10},"hold":null,"reps":15,"sets":3,"side":0,"variations":{}},
+  {"id":"b_singleleg","name":"Single-Leg Stand","disc":"Balance","focus":"balance","cue":"Stand tall on one leg, eyes on a fixed point.","muscles":"Ankle, hip, core","breath":"Steady breath","mistakes":["Hips dropping"],"ideal":{"hipFlex":5,"kneeFlex":5,"trunk":0,"arms":15},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"b_tandem","name":"Tandem Stance","disc":"Balance","focus":"balance","cue":"Heel-to-toe, hold steady, arms as needed.","muscles":"Balance","breath":"Calm breath","mistakes":["Wide, shuffling feet"],"ideal":{"hipFlex":3,"kneeFlex":5,"trunk":0,"arms":20},"hold":30,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"b_tandemwalk","name":"Tandem Walk","disc":"Balance","focus":"coordination","cue":"Walk heel-to-toe along a line, slow and controlled.","muscles":"Balance, coordination","breath":"Steady breath","mistakes":["Rushing"],"ideal":{"hipFlex":5,"kneeFlex":5,"trunk":0,"arms":20},"hold":null,"reps":10,"sets":3,"side":0,"variations":{}},
+  {"id":"b_heelraise_bal","name":"Single-Leg Heel Raise","disc":"Balance","focus":"balance","cue":"On one leg, rise onto the toes with control.","muscles":"Ankle, calf","breath":"Exhale up","mistakes":["Wobbling"],"ideal":{"hipFlex":5,"kneeFlex":5,"trunk":0,"arms":15},"hold":null,"reps":10,"sets":2,"side":1,"variations":{}},
+  {"id":"b_clockreach","name":"Clock Reach","disc":"Balance","focus":"coordination","cue":"On one leg, reach the free foot to different clock numbers.","muscles":"Hip, balance","breath":"Steady breath","mistakes":["Losing the standing hip"],"ideal":{"hipFlex":15,"kneeFlex":10,"trunk":10,"arms":30},"hold":null,"reps":8,"sets":2,"side":1,"variations":{}},
+  {"id":"b_star","name":"Star Excursion","disc":"Balance","focus":"coordination","cue":"On one leg, reach the free foot out in each direction.","muscles":"Hip, ankle, control","breath":"Steady breath","mistakes":["Collapsing the arch"],"ideal":{"hipFlex":20,"kneeFlex":15,"trunk":10,"arms":20},"hold":null,"reps":6,"sets":2,"side":1,"variations":{}},
+  {"id":"f_hamstring","name":"Standing Hamstring Stretch","disc":"Flexibility","focus":"flexibility","cue":"Hinge over a nearly straight leg, long spine.","muscles":"Hamstrings","breath":"Exhale into the stretch","mistakes":["Rounding hard"],"ideal":{"hipFlex":80,"kneeFlex":10,"trunk":60,"arms":20},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_hipflexor","name":"Half-Kneeling Hip Flexor","disc":"Flexibility","focus":"flexibility","cue":"Tuck the pelvis, then shift gently forward.","muscles":"Hip flexors","breath":"Breathe slowly","mistakes":["Arching the back"],"ideal":{"hipFlex":0,"kneeFlex":90,"trunk":0,"arms":150},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_calf","name":"Wall Calf Stretch","disc":"Flexibility","focus":"flexibility","cue":"Back heel down, lean into the wall.","muscles":"Calves","breath":"Slow breath","mistakes":["Back heel lifting"],"ideal":{"hipFlex":10,"kneeFlex":5,"trunk":15,"arms":120},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_chest","name":"Doorway Chest Stretch","disc":"Flexibility","focus":"flexibility","cue":"Forearm on the frame, turn gently away.","muscles":"Chest, shoulders","breath":"Exhale into it","mistakes":["Shrugging"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":90},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_figure4","name":"Seated Figure-4","disc":"Flexibility","focus":"flexibility","cue":"Ankle over the opposite knee, hinge forward.","muscles":"Glutes, hip rotators","breath":"Breathe into the hip","mistakes":["Rounding the back"],"ideal":{"hipFlex":90,"kneeFlex":90,"trunk":20,"arms":20},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_neck","name":"Gentle Neck Stretch","disc":"Flexibility","focus":"flexibility","cue":"Ease the ear toward the shoulder, no force.","muscles":"Neck","breath":"Slow breath","mistakes":["Forcing the range"],"ideal":{"hipFlex":0,"kneeFlex":5,"trunk":0,"arms":10},"hold":20,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_quad","name":"Standing Quad Stretch","disc":"Flexibility","focus":"flexibility","cue":"Heel toward the glute, knees together, tall.","muscles":"Quads","breath":"Steady breath","mistakes":["Arching the back"],"ideal":{"hipFlex":0,"kneeFlex":120,"trunk":0,"arms":15},"hold":30,"reps":null,"sets":2,"side":1,"variations":{}},
+  {"id":"f_childflex","name":"Child's Pose Stretch","disc":"Flexibility","focus":"flexibility","cue":"Hips back to heels, arms long, breathe into the back.","muscles":"Back, hips","breath":"Deep breaths","mistakes":["Straining the knees"],"ideal":{"hipFlex":120,"kneeFlex":120,"trunk":0,"arms":150},"hold":40,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_box","name":"Box Breathing","disc":"Breathwork","focus":"recovery","cue":"In four, hold four, out four, hold four.","muscles":"Nervous system","breath":"4-4-4-4 count","mistakes":["Straining the breath"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":60,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_belly","name":"Belly Breathing","disc":"Breathwork","focus":"recovery","cue":"Hand on belly, breathe low and slow into the hand.","muscles":"Diaphragm","breath":"Long slow breaths","mistakes":["Breathing into the chest"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":60,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_altnostril","name":"Alternate Nostril Breathing","disc":"Breathwork","focus":"recovery","cue":"Alternate closing each nostril, slow and even.","muscles":"Nervous system","breath":"Slow even breaths","mistakes":["Rushing"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":60,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_ujjayi","name":"Ujjayi Breath","disc":"Breathwork","focus":"recovery","cue":"Slight throat constriction, ocean-like sound.","muscles":"Breath control","breath":"Long steady breaths","mistakes":["Forcing the sound"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":60,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_478","name":"4-7-8 Breath","disc":"Breathwork","focus":"recovery","cue":"In four, hold seven, out eight. Calms the system.","muscles":"Nervous system","breath":"4-7-8 count","mistakes":["Straining to hold"],"ideal":{"hipFlex":2,"kneeFlex":3,"trunk":0,"arms":10},"hold":60,"reps":null,"sets":2,"side":0,"variations":{}},
+  {"id":"r_bodyscan","name":"Body Scan","disc":"Breathwork","focus":"recovery","cue":"Slowly move attention from head to toe, releasing tension.","muscles":"Mind-body","breath":"Natural breathing","mistakes":["Rushing through"],"ideal":{"hipFlex":120,"kneeFlex":120,"trunk":0,"arms":150},"hold":90,"reps":null,"sets":2,"side":0,"variations":{}},
+];
+
+/* ---------------- register library into the guidance engine ---------------- */
+const LEVELS = ['Rehab','Beginner','Novice','Intermediate','Advanced','Athletic','Elite'];
+// Scale reps/hold by level (index 0..6); level 3 (Intermediate) = as authored.
+function scaleForLevel(base, lvl){
+  const f = [0.5,0.65,0.8,1,1.2,1.45,1.7][lvl] ?? 1;
+  const o = {...base};
+  if (o.hold) o.hold = Math.max(10, Math.round(base.hold*f/5)*5);
+  if (o.reps) o.reps = Math.max(4, Math.round(base.reps*f));
+  o.sets = Math.max(1, Math.min(4, Math.round((base.sets||2)*(lvl>=4?1.3:lvl<=1?0.7:1))));
+  return o;
+}
+const VARIATION_NOTES = {
+  seated:'Seated version: perform seated in a sturdy chair, same upper-body actions.',
+  standing:'Standing version: perform standing tall, brace the core.',
+  wall:'Wall-supported: keep a hand or back on the wall for support.',
+  limited:'Limited-mobility: reduce the range, move slowly, stop before discomfort.',
+  senior:'Senior-friendly: smaller range, hold a chair for balance, breathe easy.',
+  joint:'Joint-friendly: pain-free range only, avoid deep end ranges.',
+  athletic:'Athletic: add tempo, pause at the hardest point, or add a light load.',
+};
+// Register each library entry so guided()/avatar/voice can use its id as a key.
+for (const ex of LIBRARY){
+  EX[ex.id] = { n:ex.name, a:ex.focus, sets:ex.sets||2, reps:ex.reps||null, hold:ex.hold||null, cue:ex.cue, side:ex.side||0 };
+  IDEAL[ex.id] = { ...ex.ideal, label:ex.name };
+  EXKEY[ex.id] = ex.id;
+  // Build a light FORM spec from focus so color coding + PT cues work generically.
+  const checks = [];
+  if (['strength','balance'].includes(ex.focus)) checks.push({part:'spine', get:a=>a.trunkLean, ok:[0,15], warn:26, cue:'Keep your torso tall.', why:'A stable trunk protects the spine and directs the effort to the target muscle.', bad:'Torso lean'});
+  if (ex.name.toLowerCase().includes('squat')||ex.name.toLowerCase().includes('lunge')) checks.push({part:'knee', get:(a,s)=>a.valgus[s||'left'], ok:[-3,3], warn:6, cue:'Track the knee over the toes.', why:'Prevents inward knee stress.', bad:'Knee valgus'});
+  FORM[ex.id] = { muscles:ex.muscles, breath:ex.breath, mistakes:ex.mistakes, checks,
+                  repJoint: ex.reps && ex.focus==='strength' ? { get:(a,s)=>a.knee[s||'left'], down:x=>x>60, up:x=>x<20 } : undefined };
+}
+const DISCIPLINES = [...new Set(LIBRARY.map(e=>e.disc))];
+
 async function guided(keys){
   voice.warm();
   const list = keys.map(k=>({key:k, ...EX[k], spec:FORM[k]||{}}));
@@ -1256,6 +1378,57 @@ async function roomCalibrate(keys){
 }
 
 
+
+/* ---------------- exercise library UI ---------------- */
+const DISC_ICON = { Yoga:'🧘', Pilates:'🤸', 'Tai Chi':'☯️', Mobility:'🔄', Strength:'💪', Balance:'⚖️', Flexibility:'🤾', Breathwork:'🌬️' };
+let exNav = { disc:null, level:3 };
+function exercises(){
+  if (exNav.disc) return exerciseList(exNav.disc);
+  view.innerHTML = `<h1>Exercises</h1><p>Pick a discipline. Every move has a 3D guide and voice coaching — no assessment needed.</p>
+    <div class="disc-grid">${DISCIPLINES.map(d=>{const n=LIBRARY.filter(e=>e.disc===d).length;return `<button class="disc" data-d="${d}"><span class="di">${DISC_ICON[d]||'•'}</span><b>${d}</b><small>${n} exercises</small></button>`;}).join('')}</div>
+    <p class="tip">${LIBRARY.length} exercises and growing. Each supports 7 levels from Rehab to Elite.</p>`;
+  view.querySelectorAll('.disc').forEach(b=>b.onclick=()=>{ exNav.disc=b.dataset.d; exercises(); });
+}
+function exerciseList(disc){
+  const items = LIBRARY.filter(e=>e.disc===disc);
+  const focuses = [...new Set(items.map(e=>e.focus))];
+  view.innerHTML = `<button class="back" id="bk">‹ Disciplines</button><h1>${DISC_ICON[disc]||''} ${disc}</h1>
+    ${focuses.map(f=>`<h2>${f}</h2>${items.filter(e=>e.focus===f).map(e=>`<div class="exrow" data-id="${e.id}"><div><b>${e.name}</b><small>${e.hold?e.hold+'s hold':e.reps+' reps'}${e.side?' each side':''} · ${e.muscles}</small></div><span class="chev">›</span></div>`).join('')}`).join('')}`;
+  view.querySelector('#bk').onclick=()=>{ exNav.disc=null; exercises(); };
+  view.querySelectorAll('.exrow').forEach(r=>r.onclick=()=>exerciseDetail(r.dataset.id));
+}
+function exerciseDetail(id){
+  const ex = LIBRARY.find(e=>e.id===id); if(!ex) return;
+  let az=35;
+  view.innerHTML = `<button class="back" id="bk">‹ ${ex.disc}</button><h1>${ex.name}</h1>
+    <div class="avatar-wrap"><canvas id="exav"></canvas>
+      <div class="av-btns"><button data-a="20">Front</button><button data-a="65">Side</button><button data-a="200">Back</button><button data-a="40">3⁄4</button></div>
+      <p class="tip">Drag the figure to rotate</p></div>
+    <div class="panel"><p class="ink">${ex.cue}</p>
+      <div class="two"><div><span class="lbl">Muscles</span><b>${ex.muscles}</b></div><div><span class="lbl">Breathing</span><b>${ex.breath}</b></div></div>
+      ${ex.mistakes.length?`<p class="lbl" style="margin-top:10px">Avoid</p><ul>${ex.mistakes.map(m=>`<li>${m}</li>`).join('')}</ul>`:''}
+    </div>
+    <label class="f">Difficulty level<select id="lvl">${LEVELS.map((l,i)=>`<option value="${i}" ${i===exNav.level?'selected':''}>${i+1}. ${l}</option>`).join('')}</select></label>
+    <div class="panel" id="dose"></div>
+    <button class="btn" id="start">Start with voice guidance</button>
+    <p class="tip">Variations: seated, standing, wall-supported, limited-mobility, senior, joint-friendly and athletic — the coach adjusts range and pace to your level.</p>`;
+  view.querySelector('#bk').onclick=()=>exerciseList(ex.disc);
+  const av=view.querySelector('#exav'); const paint=()=>renderAvatar(av, id, az); paint();
+  view.querySelectorAll('.av-btns button').forEach(b=>b.onclick=()=>{az=+b.dataset.a;paint();});
+  let drag=false,lx=0; av.onmousedown=e=>{drag=true;lx=e.clientX;}; window.addEventListener('mousemove',e=>{if(drag){az=(az+(e.clientX-lx)*0.5+360)%360;lx=e.clientX;paint();}}); window.addEventListener('mouseup',()=>drag=false);
+  av.ontouchstart=e=>{drag=true;lx=e.touches[0].clientX;}; av.ontouchmove=e=>{if(drag){az=(az+(e.touches[0].clientX-lx)*0.5+360)%360;lx=e.touches[0].clientX;paint();e.preventDefault();}}; av.ontouchend=()=>drag=false;
+  const dose=view.querySelector('#dose'), lvlSel=view.querySelector('#lvl');
+  const showDose=()=>{ const lvl=+lvlSel.value; exNav.level=lvl; const d=scaleForLevel(ex,lvl); dose.innerHTML=`<span class="lbl">At ${LEVELS[lvl]} level</span><b style="font-size:18px">${d.sets} set${d.sets>1?'s':''} × ${d.hold?d.hold+' s hold':d.reps+' reps'}${ex.side?' each side':''}</b>`; };
+  showDose(); lvlSel.onchange=showDose;
+  view.querySelector('#start').onclick=async ()=>{
+    // temporarily apply the level dose to the EX entry, then run the guidance engine
+    const lvl=+lvlSel.value, d=scaleForLevel(ex,lvl);
+    EX[id]={ n:ex.name, a:ex.focus, sets:d.sets, reps:d.reps, hold:d.hold, cue:ex.cue, side:ex.side||0 };
+    const rc=await roomCalibrate([id]); if(rc?.note) voice.say(rc.note);
+    guided([id]);
+  };
+}
+
 /* ---------------- profiles: gate, intake, picker ---------------- */
 // If no profile exists, force the intake form before anything else.
 function requireProfile(){
@@ -1296,7 +1469,7 @@ function intakeScreen(existing){
   };
 }
 function profilePicker(){
-  view.innerHTML = `<h1>Profiles</h1>
+  view.innerHTML = `<button class="back" id="bkp">‹ Settings</button><h1>Profiles</h1>
     ${ROOT.profiles.map(p=>{
       const a=p.profile.birth?Math.floor((Date.now()-new Date(p.profile.birth))/31557600000):null;
       const last=p.sessions.at(-1);
@@ -1307,6 +1480,7 @@ function profilePicker(){
     <button class="btn" id="add">Add a person</button>`;
   view.querySelectorAll('.pc-main').forEach(el=>el.onclick=()=>switchProfile(el.dataset.id));
   view.querySelectorAll('.pc-del').forEach(el=>el.onclick=()=>{ const id=el.dataset.del; const p=ROOT.profiles.find(x=>x.id===id); if(confirm(`Delete ${p.profile.first||'this profile'} and all their data?`)){ deleteProfile(id); if(!S) intakeScreen(); else show('settings'); } });
+  view.querySelector('#bkp')?.addEventListener('click',()=>show('settings'));
   view.querySelector('#add').onclick=()=>intakeScreen();
 }
 
@@ -1315,7 +1489,7 @@ const view=document.getElementById('view');
 function show(tab){
   if (!S && tab!=='profiles'){ intakeScreen(); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('on')); return; }
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
-  ({home,assess,plan,posture,settings,profiles:profilePicker})[tab]?.();
+  ({home,assess,exercises,plan,posture,settings,profiles:profilePicker})[tab]?.();
 }
 function chart(canvas, series, range){
   const cutoff=Date.now()-range*86400000, data=S.sessions.filter(s=>s.date>=cutoff); const c=canvas.getContext('2d'); const W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
