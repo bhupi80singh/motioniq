@@ -89,6 +89,25 @@ input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12p
 .roommeter{ height:14px; border-radius:7px; background:linear-gradient(90deg,#FF6B6B,#FFB020,#3DDC97); position:relative; margin:10px 0 }
 .roommeter i{ position:absolute; top:-4px; width:6px; height:22px; background:#fff; border-radius:3px; transform:translateX(-50%) }
 
+/* movement guide panel */
+.guidepanel{ position:absolute; inset:0; z-index:20; background:rgba(15,27,45,.97); overflow:auto; display:flex }
+.gp-scroll{ margin:auto; width:100%; max-width:520px; padding:24px 20px calc(24px + env(safe-area-inset-bottom)) }
+.guidepanel h2{ text-align:center; margin-bottom:8px }
+.guidepanel canvas#gpav{ width:100%; height:280px; display:block; background:#0c1626; border-radius:16px }
+.guidepanel ul{ margin:14px 0; list-style:none }
+.guidepanel li{ padding:9px 0; border-bottom:1px solid var(--line); color:var(--dim) }
+.guidepanel li b{ color:var(--ink); margin-right:6px }
+
+/* voice control */
+.micbtn{ position:absolute; top:max(16px,env(safe-area-inset-top)); right:16px; z-index:15; width:52px; height:52px; border-radius:50%; border:1px solid var(--line); background:rgba(15,27,45,.8); color:var(--dim); display:grid; place-items:center }
+.micbtn.on{ background:var(--amber); color:#1a1200; border-color:var(--amber); box-shadow:0 0 0 0 rgba(255,176,32,.6); animation:pulse 1.6s infinite }
+@keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(255,176,32,.5)} 70%{box-shadow:0 0 0 14px rgba(255,176,32,0)} 100%{box-shadow:0 0 0 0 rgba(255,176,32,0)} }
+@media (prefers-reduced-motion:reduce){ .micbtn.on{ animation:none } }
+.miccap{ position:absolute; top:calc(max(16px,env(safe-area-inset-top)) + 60px); right:16px; z-index:15; max-width:60%; text-align:right; color:#fff; font-size:14px; text-shadow:0 1px 6px #000; opacity:0; transition:opacity .2s }
+.miccap.show{ opacity:1 }
+
+
+
 </style>
 </head>
 <body>
@@ -133,6 +152,74 @@ const voice = (() => {
     warm() { const u = new SpeechSynthesisUtterance(''); speechSynthesis.speak(u); }  // iOS needs a user-gesture utterance
   };
 })();
+
+
+/* ---------------- voice command recognition ---------------- */
+// A small voice remote. Listens (when enabled) and fires named commands.
+// On iOS, recognition runs in bursts and auto-restarts. On desktop Chrome it can be continuous.
+const listener = (() => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec=null, want=false, handler=null, onCaption=null, restartT=null;
+  const supported = !!SR;
+  // command -> list of spoken phrases that trigger it
+  const GRAMMAR = {
+    start:['start','begin','go','ready','i am ready',"i'm ready",'lets go',"let's go"],
+    pause:['pause','wait','hold on','stop for a second'],
+    resume:['resume','continue','carry on','keep going'],
+    stop:['stop','stop early','done','finish'],
+    next:['next','next one','move on'],
+    redo:['redo','again','repeat','do over','try again'],
+    skip:['skip','skip this'],
+    flip:['flip','flip camera','switch camera','front camera','back camera'],
+    guide:['how do i do this','show me','watch again','how does it look','demonstrate'],
+    louder:['louder','speak up','volume up'],
+    cancel:['cancel','quit','exit','end'],
+  };
+  function match(text){
+    const t=text.toLowerCase().trim();
+    for (const cmd in GRAMMAR) for (const phrase of GRAMMAR[cmd]) if (t===phrase || t.includes(phrase)) return cmd;
+    return null;
+  }
+  function build(){
+    rec = new SR(); rec.lang = navigator.language||'en-US'; rec.interimResults=false; rec.maxAlternatives=3;
+    rec.continuous = false;  // iOS ignores true; we restart manually
+    rec.onresult = e => {
+      for (const r of e.results){ const txt=r[0].transcript; onCaption?.(txt);
+        const cmd=match(txt); if (cmd){ handler?.(cmd); break; } }
+    };
+    rec.onerror = e => { if (e.error==='not-allowed'||e.error==='service-not-allowed'){ want=false; onCaption?.('Mic blocked — allow microphone access'); } };
+    rec.onend = () => { if (want){ restartT=setTimeout(()=>{ try{rec.start();}catch(_){}} , 250); } };
+  }
+  return {
+    supported,
+    on(){ if(!supported) return false; if(!rec) build(); want=true; try{rec.start();}catch(_){}; return true; },
+    off(){ want=false; clearTimeout(restartT); try{rec?.stop();}catch(_){}; },
+    set(fn){ handler=fn; },
+    caption(fn){ onCaption=fn; },
+    get active(){ return want; }
+  };
+})();
+
+// Wire a set of {command: callback} for the current screen. Unhandled commands are ignored.
+function voiceCommands(map){
+  listener.set(cmd => { const fn=map[cmd]; if(fn){ voice.say('',null,0,'low'); fn(); } });
+}
+// The floating mic button + caption, shown on camera screens when voice control is available.
+function ensureMicUI(){
+  if (!listener.supported) return;
+  let mic=document.getElementById('micbtn');
+  if (!mic){
+    mic=document.createElement('button'); mic.id='micbtn'; mic.className='micbtn';
+    const cap=document.createElement('div'); cap.id='miccap'; cap.className='miccap';
+    document.getElementById('cam').append(mic, cap);
+    listener.caption(t=>{ cap.textContent='“'+t+'”'; cap.classList.add('show'); clearTimeout(cap._t); cap._t=setTimeout(()=>cap.classList.remove('show'),2500); });
+    mic.onclick=()=>{ if(listener.active){ listener.off(); paintMic(); } else { listener.on(); S.profile.mic=true; save(); paintMic(); voice.say('Voice control on. Say start, pause, resume, next, or skip.'); } };
+  }
+  paintMic();
+}
+function paintMic(){ const m=document.getElementById('micbtn'); if(m){ m.classList.toggle('on', listener.active); m.innerHTML = listener.active ? micIcon(true) : micIcon(false); } }
+function micIcon(on){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>`+(on?'':''); }
+function removeMicUI(){ document.getElementById('micbtn')?.remove(); document.getElementById('miccap')?.remove(); }
 
 /* ---------------- pose ---------------- */
 const J = ['head','neck','leftShoulder','rightShoulder','leftElbow','rightElbow','leftWrist','rightWrist','spine','pelvis','leftHip','rightHip','leftKnee','rightKnee','leftAnkle','rightAnkle','leftFoot','rightFoot'];
@@ -399,6 +486,7 @@ async function openCamera(facing='environment') {
   video.srcObject = stream; await video.play();
   document.getElementById('cam').classList.add('on');
   overlay.style.transform = facing==='user' ? 'scaleX(-1)' : 'none'; video.style.transform = overlay.style.transform;
+  ensureMicUI(); if (S.profile.mic && listener.supported && !listener.active) listener.on(), paintMic();
   for (const k in filters) delete filters[k];
   let lastT=-1;
   const loop = () => {
@@ -412,7 +500,7 @@ async function openCamera(facing='environment') {
   }; loop();
 }
 function addFlip(){ const b=document.getElementById('flip'); if(b) b.onclick=flipCamera; }
-function closeCamera(){ cancelAnimationFrame(rafId); stream?.getTracks().forEach(t=>t.stop()); document.getElementById('cam').classList.remove('on'); onPose=null; voice.stop(); countEl.textContent=''; }
+function closeCamera(){ cancelAnimationFrame(rafId); stream?.getTracks().forEach(t=>t.stop()); document.getElementById('cam').classList.remove('on'); onPose=null; voice.stop(); listener.set(null); removeMicUI(); countEl.textContent=''; }
 function draw(p){
   const W=overlay.width,H=overlay.height, P=i=>[p.n2d[i].x*W,p.n2d[i].y*H];
   ctx.lineWidth=5; ctx.strokeStyle='rgba(255,176,32,.9)'; ctx.lineCap='round';
@@ -554,6 +642,107 @@ function reviewLine(o){
   return s+(o.score>=80?'Strong.':o.score>=60?'Solid. Room to improve.':'This is a focus area.');
 }
 
+
+
+/* ---------------- pause + guide overlay ---------------- */
+const PAUSE = { on:false };
+function pauseFor(labelWhenPaused){ PAUSE.on=true; voice.say('Paused.',null,0,'critical'); }
+function resumeRun(){ PAUSE.on=false; voice.say('Resuming.',null,0,'critical'); }
+async function waitWhilePaused(){ while (PAUSE.on) await sleep(150); }
+
+// A dismissable panel that shows the animated reference figure + body-part breakdown for a test.
+function showGuidePanel(testId){
+  const g = MOVE[testId]; if(!g) return ()=>{};
+  const cam=document.getElementById('cam');
+  const panel=document.createElement('div'); panel.className='guidepanel'; panel.id='guidePanel';
+  panel.innerHTML=`<div class="gp-scroll"><h2>How to do it: ${g.label}</h2>
+    <canvas id="gpav"></canvas><p class="tip">Blue figure shows the movement</p>
+    <ul>${g.parts.map(p=>{const[a,b]=p.split(':');return `<li><b>${a}:</b>${b}</li>`;}).join('')}</ul>
+    <button class="btn" id="gpclose">Got it — I'm ready</button></div>`;
+  cam.appendChild(panel);
+  const stopAnim = playMoveGuide(panel.querySelector('#gpav'), testId, ()=>!document.getElementById('guidePanel'));
+  return new Promise(res=>{ panel.querySelector('#gpclose').onclick=()=>{ stopAnim(); panel.remove(); res(); }; });
+}
+// Small persistent "watch how" + pause buttons builder for the control bar.
+function ctlBar(buttons){ // buttons: [{id,label,cls}]
+  camctl.innerHTML = buttons.map(b=>`<button class="btn ${b.cls||'quiet'}" id="${b.id}">${b.label}</button>`).join('');
+}
+
+/* ---------------- assessment movement guides ---------------- */
+// For each test: a sequence of ideal poses to animate through (start->end->start),
+// plus a body-part breakdown shown as text. Poses reference the IDEAL table where
+// it fits, or inline angle specs for assessment-specific positions.
+const MOVE = {
+  deepSquat:{ label:'Deep squat', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:2,arms:15,label:'Stand tall'},
+      {hipFlex:110,kneeFlex:125,trunk:22,arms:20,label:'Squat down, heels flat'},
+      {hipFlex:5,kneeFlex:5,trunk:2,arms:15,label:'Drive back up'} ],
+    parts:['Hips: fold back and down like sitting into a chair','Knees: bend and track over the toes, not inward','Ankles: heels stay flat, knees drift forward over the feet','Spine: chest stays lifted, back long','Arms: reach forward for balance'] },
+  overheadSquat:{ label:'Overhead squat', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:2,arms:175,label:'Arms overhead'},
+      {hipFlex:105,kneeFlex:120,trunk:18,arms:170,label:'Squat, arms stay up'},
+      {hipFlex:5,kneeFlex:5,trunk:2,arms:175,label:'Stand'} ],
+    parts:['Arms: straight overhead, biceps by the ears the whole time','Thoracic spine: stay upright so the arms can stay back','Hips & knees: same squat as before','Ankles: heels down'] },
+  forwardBend:{ label:'Forward bend', poses:[
+      {hipFlex:5,kneeFlex:2,trunk:2,arms:15,label:'Stand, knees straight'},
+      {hipFlex:95,kneeFlex:5,trunk:80,arms:150,label:'Hinge and reach for toes'} ],
+    parts:['Knees: stay straight (this is the key)','Hips: hinge from the hip crease','Spine: let it round gently toward the floor','Arms/hands: reach toward the toes'] },
+  balanceLeft:{ label:'Balance, left leg', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:0,arms:15,liftKnee:70,label:'Stand on left leg'} ],
+    parts:['Left leg: your stance leg, stays planted','Right leg: lift the foot off the floor, knee up','Hips: keep them level, do not let one drop','Trunk: tall and steady, eyes on one spot'] },
+  balanceRight:{ label:'Balance, right leg', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:0,arms:15,liftKnee:70,label:'Stand on right leg'} ],
+    parts:['Right leg: your stance leg, stays planted','Left leg: lift the foot off the floor, knee up','Hips: keep them level','Trunk: tall and steady'] },
+  shoulder:{ label:'Shoulder reach', poses:[
+      {hipFlex:0,kneeFlex:5,trunk:0,arms:15,label:'Arms at sides'},
+      {hipFlex:0,kneeFlex:5,trunk:0,arms:178,label:'Reach both arms overhead'} ],
+    parts:['Arms: raise both straight up as high as they go','Shoulders: reach evenly, do not let one lag','Spine: do not arch the back to cheat height'] },
+  lungeLeft:{ label:'Lunge, left', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:3,arms:10,label:'Stand'},
+      {hipFlex:60,kneeFlex:90,trunk:5,arms:10,label:'Step left leg forward, drop back knee'},
+      {hipFlex:5,kneeFlex:5,trunk:3,arms:10,label:'Push back up'} ],
+    parts:['Left leg: steps forward, front knee bends to about 90°','Front knee: stays over the ankle, not caved in','Back leg: knee lowers toward the floor','Trunk: stays tall and upright'] },
+  lungeRight:{ label:'Lunge, right', poses:[
+      {hipFlex:5,kneeFlex:5,trunk:3,arms:10,label:'Stand'},
+      {hipFlex:60,kneeFlex:90,trunk:5,arms:10,label:'Step right leg forward, drop back knee'},
+      {hipFlex:5,kneeFlex:5,trunk:3,arms:10,label:'Push back up'} ],
+    parts:['Right leg: steps forward, front knee to about 90°','Front knee: over the ankle, not inward','Back leg: knee toward the floor','Trunk: tall'] },
+  sitToStand:{ label:'Sit to stand', poses:[
+      {hipFlex:95,kneeFlex:95,trunk:15,arms:10,seated:1,label:'Seated, arms crossed'},
+      {hipFlex:5,kneeFlex:5,trunk:5,arms:10,label:'Stand fully'} ],
+    parts:['Hips & knees: rise from the chair to full standing','Trunk: lean forward slightly to start, then tall','Arms: crossed on the chest, do not push off','Pace: as many as you can in 30 seconds'] },
+  gait:{ label:'Walk', poses:[
+      {hipFlex:20,kneeFlex:25,trunk:6,arms:35,label:'Walk toward camera'},
+      {hipFlex:20,kneeFlex:25,trunk:6,arms:35,label:'Turn and walk away'} ],
+    parts:['Legs: walk at your normal, natural pace','Arms: let them swing naturally','Trunk: upright and relaxed','Path: toward the phone, turn, walk away, twice'] },
+};
+// Animate a reference figure through a pose sequence on a canvas.
+function playMoveGuide(canvas, testId, stop){
+  const g = MOVE[testId]; if(!g){ return ()=>{}; }
+  let i=0, az=20, t0=performance.now(), raf;
+  const loop = () => {
+    if (stop && stop()){ cancelAnimationFrame(raf); return; }
+    const dur=1400, k=g.poses.length, phase=((performance.now()-t0)/dur)%k, idx=Math.floor(phase), frac=phase-idx;
+    const a=g.poses[idx], b=g.poses[(idx+1)%k], lerp=(x,y)=>x+(y-x)*frac;
+    const spec={ hipFlex:lerp(a.hipFlex||0,b.hipFlex||0), kneeFlex:lerp(a.kneeFlex||0,b.kneeFlex||0), trunk:lerp(a.trunk||0,b.trunk||0), arms:lerp(a.arms||10,b.arms||10), label:a.label };
+    drawSpecAvatar(canvas, spec, az);
+    raf=requestAnimationFrame(loop);
+  };
+  loop();
+  return ()=>cancelAnimationFrame(raf);
+}
+// Draw an arbitrary angle-spec figure (used by the animated guide).
+function drawSpecAvatar(canvas, spec, azDeg){
+  const c=canvas.getContext('2d'), W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
+  c.clearRect(0,0,W,H);
+  const P=rotateProject(idealSkeleton(spec), azDeg, W, H);
+  const bones=[['head','neck'],['neck','spine'],['spine','pelvis'],['neck','leftShoulder'],['leftShoulder','leftElbow'],['leftElbow','leftWrist'],['neck','rightShoulder'],['rightShoulder','rightElbow'],['rightElbow','rightWrist'],['pelvis','leftHip'],['leftHip','leftKnee'],['leftKnee','leftAnkle'],['leftAnkle','leftFoot'],['pelvis','rightHip'],['rightHip','rightKnee'],['rightKnee','rightAnkle'],['rightAnkle','rightFoot']];
+  c.strokeStyle='#6FA8FF'; c.lineWidth=8; c.lineCap='round';
+  for (const [a,b] of bones){ if(!P[a]||!P[b])continue; c.beginPath(); c.moveTo(...P[a]); c.lineTo(...P[b]); c.stroke(); }
+  c.fillStyle='#F2F4F7'; for (const k in P){ c.beginPath(); c.arc(P[k][0],P[k][1],9,0,7); c.fill(); }
+  c.fillStyle='#9AA7BD'; c.font='24px sans-serif'; c.textAlign='center'; if(spec.label) c.fillText(spec.label, W/2, H*0.07);
+}
+
 /* ---------------- assessment flow ---------------- */
 async function runAssessment(){
   voice.warm();
@@ -564,28 +753,48 @@ async function runAssessment(){
   for (let i=0;i<TESTS.length;i++){
     const T=TESTS[i]; let redo=true;
     while (redo && !cancelled){
-      redo=false;
-      // framing + start
-      setCue(T.title,''); subEl.textContent=`${i+1} of ${TESTS.length}. ${T.ins}`;
-      voice.say(`Test ${i+1} of ${TESTS.length}: ${T.title}. ${T.ins} Tap start when you're ready.`);
-      let inFrame=false; onPose=p=>{ inFrame=!!p&&p.coverage>=0.7; if(!inFrame) voice.say('Step back into the frame.','frame',5); };
-      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="flip">Flip camera</button><button class="btn quiet" id="camx">Cancel</button><button class="btn" id="go">Start</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();r();}; camctl.querySelector('#go').onclick=()=>{ if(!inFrame){voice.say('I need to see your whole body first.','need',4);return;} r(); }; addFlip(); });
+      redo=false; PAUSE.on=false;
+      // --- show the movement guide first (animated figure + body-part breakdown) ---
+      setCue(T.title,''); subEl.textContent='';
+      voice.say(`Test ${i+1} of ${TESTS.length}: ${T.title}. ${T.ins}`);
+      camctl.innerHTML='';
+      onPose=p=>{ if(p) draw(p); };
+      { const gp=showGuidePanel(T.id); voiceCommands({ start:()=>document.getElementById('gpclose')?.click(), guide:()=>{}, cancel:()=>{document.getElementById('gpclose')?.click();} }); await gp; }
       if (cancelled) return;
-      // countdown
+      // --- framing + start ---
+      setCue(T.title,''); subEl.textContent=`${i+1} of ${TESTS.length}. ${T.ins}`;
+      voice.say('Get into position, then tap start.','pos.'+i,20);
+      let inFrame=false; onPose=p=>{ if(p)draw(p); inFrame=!!p&&p.coverage>=0.7; if(!inFrame) voice.say('Step back into the frame.','frame',5); };
+      await new Promise(r=>{ ctlBar([{id:'watch',label:'Watch again'},{id:'flip',label:'Flip'},{id:'camx',label:'Cancel'},{id:'go',label:'Start',cls:''}]);
+        camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();r();};
+        camctl.querySelector('#watch').onclick=async()=>{ await showGuidePanel(T.id); };
+        camctl.querySelector('#go').onclick=()=>{ if(!inFrame){voice.say('I need to see your whole body first.','need',4);return;} r(); }; addFlip();
+        voiceCommands({ start:()=>camctl.querySelector('#go')?.click(), flip:flipCamera, guide:async()=>{await showGuidePanel(T.id);}, cancel:()=>{cancelled=true;closeCamera();r();} }); });
+      if (cancelled) return;
+      // --- countdown ---
       onPose=null; subEl.textContent=''; camctl.innerHTML='';
       for (const n of [3,2,1]){ countEl.textContent=n; voice.say(String(n),null,0,'critical'); await sleep(1000); }
       countEl.textContent=''; voice.say('Go.',null,0,'critical');
-      // record
-      const frames=[], coach=makeCoach(T.id), t0=performance.now(); let stopEarly=false;
-      camctl.innerHTML='<button class="btn quiet" id="stop">Stop early</button>'; camctl.querySelector('#stop').onclick=()=>stopEarly=true;
-      onPose=p=>{ if(p) frames.push(p); coach(p,(performance.now()-t0)/1000); };
-      while ((performance.now()-t0)/1000<T.dur && !stopEarly && !cancelled){ subEl.textContent=`${Math.ceil(T.dur-(performance.now()-t0)/1000)} s`; await sleep(200); }
-      onPose=null; if (cancelled) return;
+      // --- record, with timer + pause/resume ---
+      const frames=[], coach=makeCoach(T.id); let stopEarly=false, elapsedMs=0, lastTick=performance.now();
+      ctlBar([{id:'pause',label:'Pause'},{id:'stop',label:'Stop early'}]);
+      const setBtns=()=>{ camctl.querySelector('#pause')?.addEventListener('click',()=>{ pauseFor(); ctlBar([{id:'resume',label:'Resume',cls:''},{id:'stop',label:'Stop early'}]); camctl.querySelector('#resume').onclick=()=>{ resumeRun(); ctlBar([{id:'pause',label:'Pause'},{id:'stop',label:'Stop early'}]); setBtns(); lastTick=performance.now(); }; camctl.querySelector('#stop').onclick=()=>stopEarly=true; }); camctl.querySelector('#stop')?.addEventListener('click',()=>stopEarly=true); };
+      setBtns();
+      voiceCommands({ pause:()=>{ if(!PAUSE.on){ pauseFor(); ctlBar([{id:'resume',label:'Resume',cls:''},{id:'stop',label:'Stop early'}]); camctl.querySelector('#resume').onclick=()=>{resumeRun();ctlBar([{id:'pause',label:'Pause'},{id:'stop',label:'Stop early'}]);setBtns();lastTick=performance.now();}; camctl.querySelector('#stop').onclick=()=>stopEarly=true; } }, resume:()=>{ if(PAUSE.on){ resumeRun(); ctlBar([{id:'pause',label:'Pause'},{id:'stop',label:'Stop early'}]); setBtns(); lastTick=performance.now(); } }, stop:()=>stopEarly=true });
+      onPose=p=>{ if(PAUSE.on){ if(p)draw(p); return; } if(p) frames.push(p); coach(p, elapsedMs/1000); };
+      while (elapsedMs/1000 < T.dur && !stopEarly && !cancelled){
+        await sleep(150);
+        if (PAUSE.on){ setCue('Paused','warn'); subEl.textContent='Tap resume to continue'; lastTick=performance.now(); await waitWhilePaused(); continue; }
+        const now=performance.now(); elapsedMs += now-lastTick; lastTick=now;
+        const remain=Math.ceil(T.dur - elapsedMs/1000);
+        countEl.textContent=remain>0?remain:''; subEl.textContent=`${remain} s`;
+      }
+      countEl.textContent=''; onPose=null; if (cancelled) return;
       voice.say('Stop. Relax.',null,0,'critical');
       const o=analyze(T.id,frames); outcomes[T.id]=o;
       setCue(`${Math.round(o.score)} / 100`, o.score>=80?'good':o.score>=60?'':'warn'); subEl.textContent=T.title+(o.flags.length?' — '+o.flags.join(', '):'');
       voice.say(reviewLine(o));
-      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="redo">Redo</button><button class="btn" id="next">Next</button>'; camctl.querySelector('#redo').onclick=()=>{redo=true;voice.say('Let us redo '+T.title+'.');r();}; camctl.querySelector('#next').onclick=r; });
+      await new Promise(r=>{ ctlBar([{id:'redo',label:'Redo'},{id:'next',label:'Next',cls:''}]); camctl.querySelector('#redo').onclick=()=>{redo=true;voice.say('Let us redo '+T.title+'.');r();}; camctl.querySelector('#next').onclick=r; voiceCommands({ next:r, redo:()=>{redo=true;voice.say('Let us redo '+T.title+'.');r();} }); });
     }
   }
   closeCamera(); finishSession(outcomes);
@@ -716,11 +925,10 @@ async function guided(keys){
   const cam = document.getElementById('cam');
   const panel = document.createElement('div'); panel.id='coach'; cam.appendChild(panel);
   cam.classList.add('split');
-  camctl.innerHTML = '<button class="btn quiet" id="gx">End</button><button class="btn quiet" id="gflip">Flip</button><button class="btn quiet" id="gskip">Skip</button>';
+  const wctl=()=>{ camctl.innerHTML = `<button class="btn quiet" id="gx">End</button><button class="btn quiet" id="gpause">${PAUSE.on?'Resume':'Pause'}</button><button class="btn quiet" id="gflip">Flip</button><button class="btn quiet" id="gskip">Skip</button>`; document.getElementById('gx').onclick=()=>{cancelled=true;}; document.getElementById('gskip').onclick=()=>{skip=true;}; document.getElementById('gflip').onclick=flipCamera; document.getElementById('gpause').onclick=()=>{ PAUSE.on?resumeRun():pauseFor(); wctl(); }; };
+  wctl();
   let cancelled=false, skip=false;
-  document.getElementById('gx').onclick=()=>{ cancelled=true; };
-  document.getElementById('gflip').onclick=flipCamera;
-  document.getElementById('gskip').onclick=()=>{ skip=true; };
+  const wireVoice=()=>voiceCommands({ pause:()=>{if(!PAUSE.on){pauseFor();wctl();wireVoice();}}, resume:()=>{if(PAUSE.on){resumeRun();wctl();wireVoice();}}, skip:()=>{skip=true;}, cancel:()=>{cancelled=true;}, stop:()=>{skip=true;}, flip:flipCamera, next:()=>{skip=true;} }); wireVoice();
 
   let az = 30, dragging=false, lastX=0;   // avatar azimuth
   const cleanup = () => { closeCamera(); cam.classList.remove('split'); panel.remove(); };
@@ -832,7 +1040,8 @@ async function guided(keys){
     const rt=()=>{ const el=panel.querySelector('#rt'); if(el) el.textContent=`${reps} / ${target}`; };
     await new Promise(res=>{
       onPose = p => {
-        if (!p){ awayT+=33; if(awayT>1500){ setCue('Paused — come back','warn'); voice.say('Paused. Come back into view.','pause',6); } return; }
+        if (PAUSE.on){ if(p) drawColored(p, evalForm(p,e.spec).status); return; }
+        if (!p){ awayT+=33; if(awayT>1500){ setCue('Paused — come back','warn'); voice.say('Come back into view.','pause',6); } return; }
         awayT=0;
         const fm = evalForm(p, e.spec);
         drawColored(p, fm.status); drawFrame(p, e, fm, true);
@@ -852,10 +1061,10 @@ async function guided(keys){
   async function runHold(e, side, setNo, abort){
     let left=e.hold, done=false;
     const rt=()=>{ const el=panel.querySelector('#rt'); if(el) el.textContent=left+' s'; };
-    onPose = p => { if(!p) return; const fm=evalForm(p,e.spec); drawColored(p,fm.status); drawFrame(p,e,fm,true); updateMetrics(fm,e,side); speakCorrection(fm); };
+    onPose = p => { if(PAUSE.on){ if(p) drawColored(p, evalForm(p,e.spec).status); return; } if(!p) return; const fm=evalForm(p,e.spec); drawColored(p,fm.status); drawFrame(p,e,fm,true); updateMetrics(fm,e,side); speakCorrection(fm); };
     rt();
     await new Promise(res=>{
-      const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} left--; rt();
+      const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} if(PAUSE.on){ return; } left--; rt();
         if(left===Math.floor(e.hold/2)) voice.say('Halfway. Breathe.',null,0,'low');
         if(left===5) voice.say('Five seconds.');
         if(left<=0){ clearInterval(t); res(); } },1000);
@@ -864,7 +1073,7 @@ async function guided(keys){
   }
   async function rest(sec, abort){
     let left=sec; setCue('Rest','');
-    await new Promise(res=>{ const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} left--; countEl.textContent=left; if(left<=0){clearInterval(t);countEl.textContent='';res();} },1000); });
+    await new Promise(res=>{ const t=setInterval(()=>{ if(abort()){clearInterval(t);res();return;} if(PAUSE.on){return;} left--; countEl.textContent=left; if(left<=0){clearInterval(t);countEl.textContent='';res();} },1000); });
   }
   function drawFrame(p, e, fm){ /* colored skeleton already drawn by caller when fm present */ if(!fm && p){ ctx.clearRect(0,0,overlay.width,overlay.height); draw(p); } }
   let lastCorr=0;
@@ -981,7 +1190,9 @@ function settings(){
   view.innerHTML=`<h1>Settings</h1>
   <label class="f">Birth date (for age-referenced norms)<input type="date" id="birth" value="${S.profile.birth||''}"></label>
   <label class="f">Reference norms<select id="sex"><option value="0" ${!S.profile.female?'selected':''}>Male</option><option value="1" ${S.profile.female?'selected':''}>Female</option></select></label>
-  <div class="toggle"><span>Voice guidance</span><input type="checkbox" id="voice" ${S.profile.voice?'checked':''}></div>
+  <div class="toggle"><span>Voice guidance (spoken coaching)</span><input type="checkbox" id="voice" ${S.profile.voice?'checked':''}></div>
+    <div class="toggle"><span>Voice control (say “start”, “pause”…)${listener.supported?'':' — not supported on this browser'}</span><input type="checkbox" id="mic" ${S.profile.mic?'checked':''} ${listener.supported?'':'disabled'}></div>
+  <p class="tip">Voice commands during a session: “start”, “pause”, “resume”, “next”, “skip”, “redo”, “flip camera”, “how do I do this”. Tap the mic on the camera screen to start listening. On iPhone, speech is transcribed by Apple (like Siri dictation); leave this off if you prefer nothing leaves the device.</p>
   <h2>Endurance (from your watch or Health app)</h2>
   <label class="f">VO₂ max (ml/kg/min)<input type="number" id="vo2" value="${h.vo2||''}" inputmode="decimal"></label>
   <label class="f">Resting heart rate<input type="number" id="rhr" value="${h.rhr||''}" inputmode="numeric"></label>
@@ -993,7 +1204,7 @@ function settings(){
   <button class="btn quiet" id="del" style="color:var(--warn)">Delete all my data</button>
   <p class="tip" style="margin-top:20px">Motion IQ gives wellness estimates from a single phone camera, not medical measurements. Angles are typically within 3–8° in the side plane and less reliable for rotation.</p>`;
   const bind=(id,fn)=>view.querySelector('#'+id).onchange=e=>{fn(e.target);save();};
-  bind('birth',e=>S.profile.birth=e.value); bind('sex',e=>S.profile.female=e.value==='1'); bind('voice',e=>S.profile.voice=e.checked);
+  bind('birth',e=>S.profile.birth=e.value); bind('sex',e=>S.profile.female=e.value==='1'); bind('voice',e=>S.profile.voice=e.checked); bind('mic',e=>{S.profile.mic=e.checked; if(!e.checked) listener.off();});
   for (const k of ['vo2','rhr','mins','steps']) bind(k,e=>{S.profile.health=S.profile.health||{};S.profile.health[k]=+e.value||null;S.profile.health.female=S.profile.female;});
   view.querySelector('#exp').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'})); a.download='motioniq-backup.json'; a.click(); };
   view.querySelector('#imp').onclick=()=>view.querySelector('#file').click();
