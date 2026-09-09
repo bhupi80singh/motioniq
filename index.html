@@ -296,6 +296,7 @@ const BADGES=[['first','First assessment'],['improve30','30-day improvement'],['
 
 /* ---------------- camera & landmarker ---------------- */
 let landmarker=null, stream=null, rafId=null, onPose=null;
+let camFacing='user';  // 'user' = front/selfie, 'environment' = back
 const video=document.getElementById('video'), overlay=document.getElementById('overlay'), ctx=overlay.getContext('2d');
 const cue=document.getElementById('cue'), subEl=document.getElementById('sub'), countEl=document.getElementById('count'), camctl=document.getElementById('camctl');
 async function ensureModel() {
@@ -322,6 +323,7 @@ async function openCamera(facing='environment') {
     rafId=requestAnimationFrame(loop);
   }; loop();
 }
+function addFlip(){ const b=document.getElementById('flip'); if(b) b.onclick=flipCamera; }
 function closeCamera(){ cancelAnimationFrame(rafId); stream?.getTracks().forEach(t=>t.stop()); document.getElementById('cam').classList.remove('on'); onPose=null; voice.stop(); countEl.textContent=''; }
 function draw(p){
   const W=overlay.width,H=overlay.height, P=i=>[p.n2d[i].x*W,p.n2d[i].y*H];
@@ -330,6 +332,15 @@ function draw(p){
   for (const [a,b] of pairs){ ctx.beginPath(); ctx.moveTo(...P(a)); ctx.lineTo(...P(b)); ctx.stroke(); }
   ctx.fillStyle='#fff'; for (const i of [0,11,12,13,14,15,16,23,24,25,26,27,28]){ const [x,y]=P(i); ctx.beginPath(); ctx.arc(x,y,7,0,7); ctx.fill(); }
 }
+
+async function flipCamera(){
+  camFacing = camFacing==='user' ? 'environment' : 'user';
+  cancelAnimationFrame(rafId); stream?.getTracks().forEach(t=>t.stop());
+  const keep=onPose;  // preserve whatever handler the current step installed
+  try { await openCamera(camFacing); } catch(e){ alert('Camera not available: '+e.message); return; }
+  onPose=keep;
+}
+
 function setCue(t,cls=''){ cue.textContent=t; cue.className=cls; }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
@@ -408,9 +419,9 @@ function reviewLine(o){
 /* ---------------- assessment flow ---------------- */
 async function runAssessment(){
   voice.warm();
-  try { await openCamera('environment'); } catch(e){ alert('Camera not available: '+e.message+'\nOpen this page over https and allow camera access.'); return; }
+  try { await openCamera(camFacing); } catch(e){ alert('Camera not available: '+e.message+'\nOpen this page over https and allow camera access.'); return; }
   const outcomes={}; let cancelled=false;
-  camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();};
+  camctl.innerHTML='<button class="btn quiet" id="flip">Flip camera</button><button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();}; addFlip();
   await calibrate(); if (cancelled) return;
   for (let i=0;i<TESTS.length;i++){
     const T=TESTS[i]; let redo=true;
@@ -420,7 +431,7 @@ async function runAssessment(){
       setCue(T.title,''); subEl.textContent=`${i+1} of ${TESTS.length}. ${T.ins}`;
       voice.say(`Test ${i+1} of ${TESTS.length}: ${T.title}. ${T.ins} Tap start when you're ready.`);
       let inFrame=false; onPose=p=>{ inFrame=!!p&&p.coverage>=0.7; if(!inFrame) voice.say('Step back into the frame.','frame',5); };
-      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button><button class="btn" id="go">Start</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();r();}; camctl.querySelector('#go').onclick=()=>{ if(!inFrame){voice.say('I need to see your whole body first.','need',4);return;} r(); }; });
+      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="flip">Flip camera</button><button class="btn quiet" id="camx">Cancel</button><button class="btn" id="go">Start</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();r();}; camctl.querySelector('#go').onclick=()=>{ if(!inFrame){voice.say('I need to see your whole body first.','need',4);return;} r(); }; addFlip(); });
       if (cancelled) return;
       // countdown
       onPose=null; subEl.textContent=''; camctl.innerHTML='';
@@ -462,7 +473,7 @@ const todayIdx=()=>(new Date().getDay()+6)%7;
 async function runPosture(){
   voice.warm();
   try { await openCamera('user'); } catch(e){ alert('Camera not available: '+e.message); return; }
-  const frames=[]; let cancelled=false; camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();};
+  const frames=[]; let cancelled=false; camctl.innerHTML='<button class="btn quiet" id="flip">Flip camera</button><button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();}; addFlip();
   setCue('Stand naturally',''); subEl.textContent='Side-on to the camera, arms relaxed. 10 seconds.';
   voice.say("Stand naturally, side on to the camera. Don't correct yourself. I want to see your default posture. Ten seconds.");
   const t0=performance.now(); onPose=p=>{ if(p) frames.push(p); };
