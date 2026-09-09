@@ -1,0 +1,2 @@
+{ "name": "Motion IQ", "short_name": "Motion IQ", "start_url": "./index.html", "display": "standalone", "background_color": "#0F1B2D", "theme_color": "#0F1B2D",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }] }

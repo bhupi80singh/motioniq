@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0F1B2D">
+<title>Motion IQ</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+:root{--bg:#0F1B2D;--panel:#182640;--ink:#F2F4F7;--dim:#9AA7BD;--amber:#FFB020;--good:#3DDC97;--warn:#FF6B6B;--line:#26385A}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font:17px/1.45 -apple-system,"SF Pro Text",Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{display:flex;flex-direction:column;overflow:hidden}
+main{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:max(16px,env(safe-area-inset-top)) 16px 16px}
+nav{display:flex;border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--dim);padding:12px 4px 10px;font:inherit;font-size:13px}
+nav button.on{color:var(--amber)}
+nav button svg{display:block;margin:0 auto 3px;width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-bottom:14px}
+h2{font-size:19px;font-weight:600;margin:22px 0 8px}
+p{color:var(--dim)} .ink{color:var(--ink)}
+.btn{display:block;width:100%;border:0;border-radius:14px;padding:16px;font:inherit;font-weight:600;font-size:18px;background:var(--amber);color:#1a1200;margin-top:14px}
+.btn.quiet{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.4}
+.row{display:flex;gap:10px} .row .btn{margin-top:14px}
+.panel{background:var(--panel);border-radius:16px;padding:16px;margin-top:12px}
+.big{font-size:72px;font-weight:800;line-height:1;letter-spacing:-.04em}
+.band{font-size:22px;color:var(--amber);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.stat{background:var(--panel);border-radius:14px;padding:12px 10px;text-align:center}
+.stat b{display:block;font-size:30px;font-weight:700;letter-spacing:-.03em}
+.stat span{font-size:12px;color:var(--dim)}
+.regions{display:flex;gap:6px;margin-top:10px}
+.regions div{flex:1;text-align:center;font-size:11px;color:var(--dim)}
+.regions i{display:block;height:36px;border-radius:8px;margin-bottom:4px}
+canvas.chart{width:100%;height:180px;background:var(--panel);border-radius:14px;margin-top:10px}
+.seg{display:flex;background:var(--panel);border-radius:10px;padding:3px;margin-top:14px}
+.seg button{flex:1;border:0;background:none;color:var(--dim);padding:8px;font:inherit;border-radius:8px}
+.seg button.on{background:var(--line);color:var(--ink)}
+/* camera */
+#cam{position:fixed;inset:0;background:#000;display:none;flex-direction:column}
+#cam.on{display:flex}
+#cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#cam canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+#cue{position:absolute;left:0;right:0;top:max(24px,env(safe-area-inset-top));padding:0 20px;text-align:center;font-size:44px;font-weight:800;line-height:1.05;letter-spacing:-.03em;text-shadow:0 2px 12px #000;color:var(--amber)}
+#cue.good{color:var(--good)} #cue.warn{color:var(--warn)}
+#sub{position:absolute;left:0;right:0;top:calc(max(24px,env(safe-area-inset-top)) + 110px);text-align:center;font-size:20px;color:#fff;text-shadow:0 1px 8px #000;padding:0 20px}
+#camctl{position:absolute;left:16px;right:16px;bottom:max(20px,env(safe-area-inset-bottom));display:flex;gap:10px}
+#camctl .btn{margin:0}
+#count{position:absolute;inset:0;display:grid;place-items:center;font-size:180px;font-weight:900;color:#fff;text-shadow:0 4px 30px #000;pointer-events:none}
+.ex{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.ex input{width:22px;height:22px;accent-color:var(--amber)}
+.ex small{display:block;color:var(--dim)}
+label.f{display:block;margin-top:12px;color:var(--dim);font-size:14px}
+input[type=date],input[type=number],select{width:100%;margin-top:4px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit}
+.toggle{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.badges{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.badges span{padding:6px 10px;border-radius:999px;background:var(--panel);font-size:13px;color:var(--dim)}
+.badges span.on{background:var(--amber);color:#1a1200}
+.empty{text-align:center;padding:60px 20px;color:var(--dim)}
+.tip{font-size:14px;color:var(--dim);margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.btn:active{transform:scale(.98)}}
+</style>
+</head>
+<body>
+<main id="view"></main>
+<nav>
+ <button data-tab="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg>Home</button>
+ <button data-tab="assess"><svg viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/><circle cx="12" cy="12" r="3"/></svg>Assess</button>
+ <button data-tab="plan"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Plan</button>
+ <button data-tab="posture"><svg viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"/><path d="M12 6v8M8 10l4-2 4 2M12 14l-3 7M12 14l3 7"/></svg>Posture</button>
+ <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>Settings</button>
+</nav>
+
+<div id="cam">
+ <video id="video" playsinline muted autoplay></video>
+ <canvas id="overlay"></canvas>
+ <div id="cue"></div><div id="sub"></div><div id="count"></div>
+ <div id="camctl"></div>
+</div>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+/* ---------------- storage ---------------- */
+const DB = 'motioniq.v1';
+const S = JSON.parse(localStorage.getItem(DB) || 'null') || { profile:{voice:true}, sessions:[], posture:[], plan:null, badges:[], done:{} };
+const save = () => localStorage.setItem(DB, JSON.stringify(S));
+const age = () => S.profile.birth ? Math.floor((Date.now()-new Date(S.profile.birth))/31557600000) : null;
+
+/* ---------------- voice ---------------- */
+const voice = (() => {
+  const last = {}; let q = [], busy = false;
+  const pump = () => { if (busy || !q.length || !S.profile.voice) return; const t = q.shift(); const u = new SpeechSynthesisUtterance(t); u.rate = 1; busy = true; u.onend = u.onerror = () => { busy = false; pump(); }; speechSynthesis.speak(u); };
+  return {
+    say(t, key, cd = 4, pri = 'normal') {
+      if (!S.profile.voice) return;
+      if (key) { if (last[key] && Date.now() - last[key] < cd * 1000) return; last[key] = Date.now(); }
+      if (pri === 'critical') { speechSynthesis.cancel(); q = []; busy = false; }
+      else if (pri === 'low' && (busy || q.length)) return;
+      q.push(t); pump();
+    },
+    stop() { speechSynthesis.cancel(); q = []; busy = false; },
+    warm() { const u = new SpeechSynthesisUtterance(''); speechSynthesis.speak(u); }  // iOS needs a user-gesture utterance
+  };
+})();
+
+/* ---------------- pose ---------------- */
+const J = ['head','neck','leftShoulder','rightShoulder','leftElbow','rightElbow','leftWrist','rightWrist','spine','pelvis','leftHip','rightHip','leftKnee','rightKnee','leftAnkle','rightAnkle','leftFoot','rightFoot'];
+const BONES = [['head','neck'],['neck','spine'],['spine','pelvis'],['neck','leftShoulder'],['leftShoulder','leftElbow'],['leftElbow','leftWrist'],['neck','rightShoulder'],['rightShoulder','rightElbow'],['rightElbow','rightWrist'],['pelvis','leftHip'],['leftHip','leftKnee'],['leftKnee','leftAnkle'],['leftAnkle','leftFoot'],['pelvis','rightHip'],['rightHip','rightKnee'],['rightKnee','rightAnkle'],['rightAnkle','rightFoot']];
+const MP = { leftShoulder:11,rightShoulder:12,leftElbow:13,rightElbow:14,leftWrist:15,rightWrist:16,leftHip:23,rightHip:24,leftKnee:25,rightKnee:26,leftAnkle:27,rightAnkle:28,leftFoot:31,rightFoot:32 };
+const v3 = (a,b,f=1)=>[a[0]+b[0]*f,a[1]+b[1]*f,a[2]+b[2]*f], sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2];
+const len=a=>Math.hypot(...a), dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], norm=a=>{const l=len(a)||1;return [a[0]/l,a[1]/l,a[2]/l]};
+const deg=r=>r*180/Math.PI;
+const angle=(a,b,c)=>deg(Math.acos(Math.max(-1,Math.min(1,dot(norm(sub(a,b)),norm(sub(c,b)))))));
+const fromVertical=v=>deg(Math.acos(Math.max(-1,Math.min(1,dot(norm(v),[0,1,0])))));
+
+// One-Euro filter per joint
+const filters = {};
+function euro(name, x, t) {
+  const f = filters[name] || (filters[name] = { x:null, dx:[0,0,0], t:null, minCut:1.2, beta:0.03 });
+  if (f.x === null || t <= f.t) { f.x = x; f.t = t; return x; }
+  const dt = (t - f.t) / 1000, al = c => 1/(1+1/(2*Math.PI*c*dt));
+  const dx = sub(x, f.x).map(d => d/dt), aD = al(1);
+  f.dx = f.dx.map((p,i)=>aD*dx[i]+(1-aD)*p);
+  const a = al(f.minCut + f.beta*len(f.dx));
+  f.x = f.x.map((p,i)=>a*x[i]+(1-a)*p); f.t = t; return f.x;
+}
+function toPose(world, norm2d, t) {
+  const g = i => [world[i].x, -world[i].y, world[i].z], vis = i => norm2d[i].visibility ?? 1;
+  const j = {}, c = {};
+  for (const k in MP) { j[k] = g(MP[k]); c[k] = vis(MP[k]); }
+  j.neck = mid(j.leftShoulder, j.rightShoulder); c.neck = Math.min(c.leftShoulder, c.rightShoulder);
+  j.pelvis = mid(j.leftHip, j.rightHip); c.pelvis = Math.min(c.leftHip, c.rightHip);
+  j.spine = mid(j.neck, j.pelvis); c.spine = c.pelvis;
+  j.head = mid(g(7), g(8)); c.head = Math.min(vis(7), vis(8));
+  for (const k of J) j[k] = euro(k, j[k], t);
+  const ys = norm2d.map(p=>p.y), xs = norm2d.map(p=>p.x);
+  return { t, j, c, box:{ top:Math.min(...ys), bottom:Math.max(...ys), cx:(Math.min(...xs)+Math.max(...xs))/2 }, n2d: norm2d,
+           coverage: J.filter(k=>c[k]>=0.5).length / J.length };
+}
+function angles(p) {
+  const j = p.j, trunk = sub(j.neck, j.pelvis), a = { knee:{}, hip:{}, df:{}, sh:{}, valgus:{}, trunkLean: fromVertical(trunk) };
+  for (const s of ['left','right']) {
+    const H=j[s+'Hip'],K=j[s+'Knee'],A=j[s+'Ankle'],F=j[s+'Foot'],Sh=j[s+'Shoulder'],E=j[s+'Elbow'];
+    a.knee[s] = 180 - angle(H,K,A); a.hip[s] = 180 - angle(j.neck,H,K); a.df[s] = angle(K,A,F) - 90;
+    a.sh[s] = angle(j.pelvis,Sh,E);
+    const HA = sub(A,H), tt = dot(sub(K,H),HA)/Math.max(1e-6,dot(HA,HA)); const on = v3(H,HA,tt); const dx = K[0]-on[0];
+    a.valgus[s] = (s==='left' ? dx : -dx) * 100;
+  }
+  a.shTilt = (j.leftShoulder[1]-j.rightShoulder[1])*100; a.hipTilt = (j.leftHip[1]-j.rightHip[1])*100;
+  return a;
+}
+
+/* ---------------- norms & scoring ---------------- */
+const N = { df:[15,40], knee:[100,140], hip:[90,125], spineBend:[45,90], thoracic:[45,15], sh:[140,180], hold:[5,30], sway:[120,30], sts:[8,20], hipVel:[80,250], lungeLean:[30,5], fwdHead:[20,3], shRound:[20,3], pelvTilt:[20,5], tilt:[4,0.5] };
+const sc = (v,[poor,good]) => Math.min(100, Math.max(0, (v-poor)/(good-poor)*100));
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+const sym = (l,r) => { const m = Math.max(Math.abs(l),Math.abs(r)); return m ? Math.max(0,100*(1-Math.abs(l-r)/m)) : 100; };
+const band = f => f>=90?'Elite':f>=80?'Excellent':f>=70?'Good':f>=60?'Fair':'Needs work';
+const fmi = s => { const p=[[s.flex,.25],[s.mob,.25],[s.bal,.2],[s.str,.15]]; if (s.end!=null) p.push([s.end,.15]); const w=p.reduce((a,b)=>a+b[1],0); return p.reduce((a,b)=>a+b[0]*b[1],0)/w; };
+const overall = s => s.post!=null ? fmi(s)*.9+s.post*.1 : fmi(s);
+const movementAge = o => Math.max(18, Math.min(90, Math.round(30+(75-o)*0.8)));
+const peakVel = (t,v) => { let p=0; for (let i=1;i<v.length-1;i++){ const dt=(t[i+1]-t[i-1])/1000; if(dt>0) p=Math.max(p,Math.abs((v[i+1]-v[i-1])/dt)); } return p; };
+const countReps = (s,th,minF=8) => { let r=0,last=-minF; for(let i=1;i<s.length-1;i++) if(s[i]<th&&s[i]<s[i-1]&&s[i]<=s[i+1]&&i-last>=minF){r++;last=i;} return r; };
+const sway = com => { let t=0; for(let i=1;i<com.length;i++){ t+=Math.hypot(com[i][0]-com[i-1][0], com[i][2]-com[i-1][2]); } return t*100; };
+const fatigue = (t,v) => { const n=v.length; if(n<30) return 1; const k=Math.floor(n/3); const a=peakVel(t.slice(0,k),v.slice(0,k)); return a? peakVel(t.slice(n-k),v.slice(n-k))/a : 1; };
+
+const TESTS = [
+ { id:'deepSquat', title:'Deep squat', dur:12, ins:'Feet shoulder-width. Squat as low as you comfortably can, heels down. Three reps.' },
+ { id:'overheadSquat', title:'Overhead squat', dur:12, ins:'Arms straight overhead. Squat three times keeping the arms up.' },
+ { id:'forwardBend', title:'Forward bend', dur:6, ins:'Knees straight, bend forward and reach toward your toes. Hold.' },
+ { id:'balanceLeft', title:'Balance, left leg', dur:30, ins:'Stand on your left leg, hands on hips, hold up to 30 seconds.' },
+ { id:'balanceRight', title:'Balance, right leg', dur:30, ins:'Stand on your right leg, hands on hips, hold up to 30 seconds.' },
+ { id:'shoulder', title:'Shoulder reach', dur:6, ins:'Raise both arms straight overhead as far as you can. Hold.' },
+ { id:'lungeLeft', title:'Lunge, left', dur:12, ins:'Step forward with the left leg into a lunge, back knee toward the floor. Three reps.' },
+ { id:'lungeRight', title:'Lunge, right', dur:12, ins:'Step forward with the right leg into a lunge. Three reps.' },
+ { id:'sitToStand', title:'Sit to stand', dur:30, ins:'Sit on a chair, arms crossed. Stand and sit as many times as you can in 30 seconds.' },
+ { id:'gait', title:'Walk', dur:15, ins:'Walk toward the phone, turn, and walk away. Twice.' },
+];
+
+function analyze(id, frames) {
+  const A = frames.map(angles), t = frames.map(f=>f.t), m = {}, flags = [];
+  if (!A.length) return { id, score:0, m, flags:['noPose'] };
+  const S_ = f => A.map(f), mx = a => Math.max(...a), mn = a => Math.min(...a);
+  switch (id) {
+    case 'deepSquat': case 'overheadSquat': {
+      const kL=S_(a=>a.knee.left), kR=S_(a=>a.knee.right), hip=S_(a=>a.hip.left), lean=S_(a=>a.trunkLean);
+      m.kneeL=mx(kL); m.kneeR=mx(kR); m.hip=mx(hip); m.dfL=mx(S_(a=>a.df.left)); m.dfR=mx(S_(a=>a.df.right)); m.lean=mx(lean);
+      m.hipVel=peakVel(t,hip); m.kneeSym=sym(m.kneeL,m.kneeR); m.reps=countReps(kL.map(x=>-x),-70); m.fatigue=fatigue(t,hip);
+      if (mx(S_(a=>a.valgus.left))>4) flags.push('Left knee caved inward'); if (mx(S_(a=>a.valgus.right))>4) flags.push('Right knee caved inward');
+      if (m.lean>45) flags.push('Excessive forward lean');
+      const parts=[sc((m.kneeL+m.kneeR)/2,N.knee), sc(m.hip,N.hip), sc((m.dfL+m.dfR)/2,N.df)];
+      if (id==='overheadSquat'){ m.shMin=mn(S_(a=>Math.min(a.sh.left,a.sh.right))); parts.push(sc(m.lean,N.thoracic), sc(m.shMin,N.sh)); }
+      return { id, score:mean(parts), m, flags };
+    }
+    case 'forwardBend': { m.lean=mx(S_(a=>a.trunkLean)); m.hip=mx(S_(a=>a.hip.left)); return { id, score:mean([sc(m.lean,N.spineBend),sc(m.hip,N.hip)]), m, flags }; }
+    case 'balanceLeft': case 'balanceRight': {
+      const lifted = id==='balanceLeft'?'rightAnkle':'leftAnkle', stance = id==='balanceLeft'?'leftAnkle':'rightAnkle';
+      let started=false, hold=(frames.at(-1).t-frames[0].t)/1000;
+      for (const f of frames){ const up=f.j[lifted][1]-f.j[stance][1]>0.05; if(up) started=true; else if(started){ hold=(f.t-frames[0].t)/1000; break; } }
+      m.hold=hold; m.sway=sway(frames.map(f=>v3(f.j.pelvis, mid(f.j.leftShoulder,f.j.rightShoulder),0.4)));
+      return { id, score:.5*sc(hold,N.hold)+.5*sc(m.sway,N.sway), m, flags };
+    }
+    case 'shoulder': { m.L=mx(S_(a=>a.sh.left)); m.R=mx(S_(a=>a.sh.right)); m.sym=sym(m.L,m.R); if(m.sym<85) flags.push('One shoulder reaches less'); return { id, score:sc((m.L+m.R)/2,N.sh), m, flags }; }
+    case 'lungeLeft': case 'lungeRight': {
+      const s=id==='lungeLeft'?'left':'right', knee=S_(a=>a.knee[s]); m.knee=mx(knee); m.lean=mx(S_(a=>a.trunkLean)); m.reps=countReps(knee.map(x=>-x),-60);
+      return { id, score:mean([sc(m.knee,[60,100]),sc(m.lean,N.lungeLean)]), m, flags };
+    }
+    case 'sitToStand': { const hip=S_(a=>a.hip.left); m.reps=countReps(hip,25); m.hipVel=peakVel(t,hip); m.fatigue=fatigue(t,hip); return { id, score:.6*sc(m.reps,N.sts)+.4*sc(m.hipVel,N.hipVel), m, flags }; }
+    case 'gait': { const kL=S_(a=>a.knee.left), kR=S_(a=>a.knee.right); m.romL=mx(kL)-mn(kL); m.romR=mx(kR)-mn(kR); m.sym=sym(m.romL,m.romR); m.lean=mean(S_(a=>a.trunkLean)); return { id, score:.6*m.sym+.4*sc(m.lean,[15,3]), m, flags }; }
+  }
+}
+function subScores(o, end, post) {
+  const g=(id,k)=>o[id]?.m[k], sq='deepSquat', reg={};
+  reg.ankles=sc(((g(sq,'dfL')||0)+(g(sq,'dfR')||0))/2,N.df); reg.knees=sc(((g(sq,'kneeL')||0)+(g(sq,'kneeR')||0))/2,N.knee);
+  reg.hips=sc(Math.max(g(sq,'hip')||0,g('forwardBend','hip')||0),N.hip); reg.spine=sc(g('forwardBend','lean')||0,N.spineBend);
+  reg.thoracic=sc(g('overheadSquat','lean')??45,N.thoracic); reg.shoulders=o.shoulder?.score||0;
+  const flex=mean(Object.values(reg)), mob=mean(['overheadSquat','lungeLeft','lungeRight','gait'].map(k=>o[k]?.score).filter(x=>x!=null));
+  let bal=mean(['balanceLeft','balanceRight'].map(k=>o[k]?.score).filter(x=>x!=null));
+  if (o.balanceLeft&&o.balanceRight&&sym(o.balanceLeft.score,o.balanceRight.score)<80) bal*=.9;
+  const str=.5*(o.sitToStand?.score||0)+.3*sc(g(sq,'hipVel')||0,N.hipVel)+.2*sc(Math.max(g('lungeLeft','lean')??30,g('lungeRight','lean')??30),N.lungeLean);
+  return { flex, mob, bal, str, end, post, reg };
+}
+function endurance(h) { // manual entries from Settings
+  const p=[]; const ref=(a,f)=>{const M=[44,40,37,34,31,28],F=[37,34,31,28,25,23];const i=Math.min(5,Math.max(0,Math.floor((a-20)/10)));return f?F[i]:M[i];};
+  if (h.vo2&&age()) p.push([sc(h.vo2,[ref(age(),h.female)*.7,ref(age(),h.female)*1.3]),.5]);
+  if (h.rhr) p.push([sc(h.rhr,[85,50]),.2]); if (h.mins) p.push([sc(h.mins,[30,300]),.2]); if (h.steps) p.push([sc(h.steps,[3000,10000]),.1]);
+  if (!p.length) return null; const w=p.reduce((a,b)=>a+b[1],0); return p.reduce((a,b)=>a+b[0]*b[1],0)/w;
+}
+
+/* ---------------- goal & narration ---------------- */
+function goal(sub) {
+  const h=S.sessions, cur=h.at(-1)?.fmi||0, b=band(cur);
+  const next={ 'Needs work':['Fair',60], Fair:['Good',70], Good:['Excellent',80], Excellent:['Elite',90], Elite:[null,100] }[b];
+  const pts=h.slice(-8); let trend=0;
+  if (pts.length>=2){ const t0=pts[0].date, x=pts.map(p=>(p.date-t0)/604800000), y=pts.map(p=>p.fmi), mx=mean(x), my=mean(y);
+    const num=x.reduce((a,xi,i)=>a+(xi-mx)*(y[i]-my),0), den=x.reduce((a,xi)=>a+(xi-mx)**2,0); trend=den?num/den:0; }
+  let eliteDate=null; if (cur<90&&trend>0.05) eliteDate=new Date(Date.now()+(90-cur)/trend*604800000);
+  const areas=[['flexibility',sub.flex],['mobility',sub.mob],['balance',sub.bal],['strength',sub.str]]; if(sub.end!=null) areas.push(['endurance',sub.end]);
+  for (const k in sub.reg) areas.push([k+' flexibility',sub.reg[k]]);
+  const weak=areas.reduce((a,b)=>b[1]<a[1]?b:a);
+  return { cur, band:b, nextBand:next[0], toNext:Math.max(0,next[1]-cur), toElite:Math.max(0,90-cur), trend, eliteDate, weak:weak[0], weakScore:weak[1] };
+}
+function sessionSummary(prev, s, g, mAge) {
+  let t=`Session complete. Your Farmaha Mobility Index is ${Math.round(g.cur)}, which is ${g.band}. `;
+  const a=age(); if (a) t+= mAge<a?`Your movement age is ${mAge}, ${a-mAge} years younger than you are. `: mAge>a?`Your movement age is ${mAge}, ${mAge-a} years above your age. We can bring that down. `:`Your movement age matches your actual age. `;
+  if (prev){ const d=[['flexibility',s.flex-prev.flex],['mobility',s.mob-prev.mob],['balance',s.bal-prev.bal],['strength',s.str-prev.str]];
+    const best=d.reduce((x,y)=>y[1]>x[1]?y:x), worst=d.reduce((x,y)=>y[1]<x[1]?y:x);
+    if (best[1]>=2) t+=`Biggest gain: ${best[0]}, up ${Math.round(best[1])} points. `; if (worst[1]<=-3) t+=`${worst[0]} slipped ${Math.round(-worst[1])} points. Watch that. `; }
+  t+=`Your weakest area is ${g.weak} at ${Math.round(g.weakScore)}. This week's plan targets it. `;
+  if (g.nextBand) t+=`You're ${Math.round(g.toNext)} points from ${g.nextBand}. `;
+  if (g.band==='Elite') t+=`You're Elite. The job now is to keep it.`; else if (g.eliteDate) t+=`At your current pace you'd reach Elite around ${g.eliteDate.toLocaleDateString(undefined,{month:'long',year:'numeric'})}.`; else if (S.sessions.length>1) t+=`Your trend is flat. Consistency with the daily plan is what moves the needle.`;
+  return t;
+}
+
+/* ---------------- exercises ---------------- */
+const EX = {
+  calf:{n:'Wall calf stretch',a:'ankles',sets:3,hold:30,cue:'Back heel flat, lean into the wall until you feel the stretch.',side:1},
+  kneeWall:{n:'Knee-to-wall dorsiflexion',a:'ankles',sets:3,reps:10,cue:'Drive the knee over the toes without lifting the heel.',side:1},
+  squatHold:{n:'Supported deep squat hold',a:'ankles',sets:3,hold:30,cue:'Hold a doorframe, sink as low as you can, heels down.'},
+  bridge:{n:'Glute bridge',a:'strength',sets:3,reps:12,cue:'Squeeze the glutes at the top. Do not arch the lower back.'},
+  split:{n:'Split squat',a:'strength',sets:3,reps:8,cue:'Torso tall. Back knee taps toward the floor.',side:1},
+  stepUp:{n:'Step-up',a:'strength',sets:3,reps:10,cue:'Drive through the whole foot. Control the way down.',side:1},
+  sls:{n:'Single-leg stand',a:'balance',sets:3,hold:30,cue:'Eyes on one spot. Add a head turn when it gets easy.',side:1},
+  tandem:{n:'Tandem walk',a:'balance',sets:3,reps:10,cue:'Heel to toe along a line. Slow and controlled.'},
+  tree:{n:'Tree pose',a:'balance',sets:2,hold:30,cue:'Foot above or below the knee, never on it.',side:1},
+  openBook:{n:'Open book',a:'thoracic',sets:2,reps:10,cue:'Knees stay stacked. Follow your hand with your eyes.',side:1},
+  catCow:{n:'Cat-cow',a:'thoracic',sets:2,reps:10,cue:'Move one vertebra at a time. Breathe with it.'},
+  tRot:{n:'Quadruped thoracic rotation',a:'thoracic',sets:2,reps:10,cue:'Hand behind head, rotate the elbow up to the ceiling.',side:1},
+  hipFlex:{n:'Half-kneeling hip flexor stretch',a:'hips',sets:2,hold:30,cue:'Tuck the pelvis under before you shift forward.',side:1},
+  nn:{n:'90/90 hip switches',a:'hips',sets:2,reps:8,cue:'Stay tall. Let the knees fall together, then swing to the other side.'},
+  floss:{n:'Hamstring floss',a:'spine',sets:2,reps:10,cue:'Straighten the leg slowly; back stays neutral.',side:1},
+  cars:{n:'Shoulder CARs',a:'shoulders',sets:2,reps:5,cue:'Slow, huge circle. Ribs stay down.',side:1},
+  wall:{n:'Wall slide',a:'shoulders',sets:2,reps:10,cue:'Forearms on the wall, slide up without arching.'},
+  chin:{n:'Chin tuck',a:'posture',sets:3,reps:10,cue:'Make a double chin. Hold two seconds.'},
+  brisk:{n:'Brisk walk or bike',a:'endurance',sets:1,hold:1500,cue:'Zone two: you can talk but not sing.'},
+};
+function weeklyPlan(s) {
+  const pool=[]; const add=(score,keys)=>{ if(score<70) keys.forEach(k=>pool.push([k,70-score])); };
+  add(s.reg.ankles??100,['calf','kneeWall','squatHold']); add(s.reg.thoracic??100,['openBook','catCow','tRot']); add(s.reg.hips??100,['hipFlex','nn']);
+  add(s.reg.spine??100,['floss','catCow']); add(s.reg.shoulders??100,['cars','wall']); add(s.str,['bridge','split','stepUp']); add(s.bal,['sls','tandem','tree']);
+  add(s.end??100,['brisk']); add(s.post??100,['chin','wall']);
+  if (!pool.length) pool.push(['cars',1],['nn',1],['sls',1],['bridge',1]);
+  const best={}; for (const [k,p] of pool) if ((best[k]??-1)<p) best[k]=p;
+  const ranked=Object.entries(best).sort((a,b)=>b[1]-a[1]).map(e=>e[0]).slice(0,8);
+  const days=Array.from({length:7},()=>[]);
+  ranked.forEach((k,i)=>{ const f=i<3?4:3; const set=new Set(); for(let n=0;n<f;n++) set.add((Math.floor(n*7/f)+i)%6); set.forEach(d=>days[d].push(k)); });
+  days[6]=['catCow','nn','cars'];
+  return days;
+}
+const BADGES=[['first','First assessment'],['improve30','30-day improvement'],['balance','Balance master'],['flex','Flexibility elite'],['strength','Strength milestone'],['elite','Elite']];
+
+/* ---------------- camera & landmarker ---------------- */
+let landmarker=null, stream=null, rafId=null, onPose=null;
+const video=document.getElementById('video'), overlay=document.getElementById('overlay'), ctx=overlay.getContext('2d');
+const cue=document.getElementById('cue'), subEl=document.getElementById('sub'), countEl=document.getElementById('count'), camctl=document.getElementById('camctl');
+async function ensureModel() {
+  if (landmarker) return;
+  setCue('Loading motion model…','');
+  const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+  landmarker = await PoseLandmarker.createFromOptions(vision, { baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task', delegate:'GPU' }, runningMode:'VIDEO', numPoses:1 });
+}
+async function openCamera(facing='environment') {
+  await ensureModel();
+  stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:facing, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+  video.srcObject = stream; await video.play();
+  document.getElementById('cam').classList.add('on');
+  overlay.style.transform = facing==='user' ? 'scaleX(-1)' : 'none'; video.style.transform = overlay.style.transform;
+  for (const k in filters) delete filters[k];
+  let lastT=-1;
+  const loop = () => {
+    if (video.readyState>=2 && video.currentTime!==lastT) {
+      lastT=video.currentTime; const now=performance.now();
+      const r=landmarker.detectForVideo(video, now);
+      overlay.width=video.videoWidth; overlay.height=video.videoHeight; ctx.clearRect(0,0,overlay.width,overlay.height);
+      if (r.landmarks?.[0]) { const p=toPose(r.worldLandmarks[0], r.landmarks[0], now); draw(p); onPose?.(p); } else onPose?.(null);
+    }
+    rafId=requestAnimationFrame(loop);
+  }; loop();
+}
+function closeCamera(){ cancelAnimationFrame(rafId); stream?.getTracks().forEach(t=>t.stop()); document.getElementById('cam').classList.remove('on'); onPose=null; voice.stop(); countEl.textContent=''; }
+function draw(p){
+  const W=overlay.width,H=overlay.height, P=i=>[p.n2d[i].x*W,p.n2d[i].y*H];
+  ctx.lineWidth=5; ctx.strokeStyle='rgba(255,176,32,.9)'; ctx.lineCap='round';
+  const pairs=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[27,31],[24,26],[26,28],[28,32]];
+  for (const [a,b] of pairs){ ctx.beginPath(); ctx.moveTo(...P(a)); ctx.lineTo(...P(b)); ctx.stroke(); }
+  ctx.fillStyle='#fff'; for (const i of [0,11,12,13,14,15,16,23,24,25,26,27,28]){ const [x,y]=P(i); ctx.beginPath(); ctx.arc(x,y,7,0,7); ctx.fill(); }
+}
+function setCue(t,cls=''){ cue.textContent=t; cue.className=cls; }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ---------------- calibration ---------------- */
+function calibrate(){ return new Promise(resolve=>{
+  setCue('Set up','' ); subEl.textContent='Lean the phone upright at about hip height, then walk back until I can see you head to toe.';
+  voice.say('Lean your phone upright at about hip height, screen facing you. Then walk back until I can see you from head to toe.','cal.start',30);
+  let still=[]; const t0=performance.now();
+  onPose = p => {
+    if (!p){ setCue('Step into the frame'); voice.say("I can't see you yet. Step into the frame.",'cal.none',5); still=[]; return; }
+    const h=p.box.bottom-p.box.top, feetOut=p.box.bottom>0.98, headOut=p.box.top<0.02;
+    if (p.coverage<0.7||feetOut||headOut){ const msg=feetOut?"I can't see your feet. Step back.":headOut?'Your head is cut off. Step back.':'Step back into the frame.'; setCue(feetOut?'Step back':headOut?'Step back':'Show whole body','warn'); voice.say(msg,'cal.frame',4); still=[]; return; }
+    if (h>0.92){ setCue('Step back','warn'); voice.say('A little further back.','cal.back',3); still=[]; return; }
+    if (h<0.55){ setCue('Come forward','warn'); voice.say('Come forward a little.','cal.fwd',3); still=[]; return; }
+    if (Math.abs(p.box.cx-0.5)>0.2){ const d=p.box.cx<0.5?'right':'left'; setCue('Move '+d,'warn'); voice.say('Move a bit to your '+d+'.','cal.center',3); still=[]; return; }
+    setCue('Stop. Hold still','good'); voice.say('Stop right there. Hold still for two seconds.','cal.hold',6,'critical');
+    still.push(p); if (still.length>1 && p.t-still[0].t>=2000){ onPose=null; setCue("You're set",'good'); subEl.textContent=''; voice.say("You're set. Let's begin.",null,0,'critical'); setTimeout(resolve,1200); }
+  };
+});}
+
+/* ---------------- live coaching ---------------- */
+function makeCoach(id){
+  let reps=0,inRep=false,best=0,holdStart=null,lastSec=-1;
+  return (p,el)=>{
+    if(!p) return; const a=angles(p);
+    const side=id.endsWith('Left')?'left':'right';
+    if (id==='deepSquat'||id==='overheadSquat'){
+      const k=(a.knee.left+a.knee.right)/2, valgus=Math.max(a.valgus.left,a.valgus.right)>4, heel=(a.df.left+a.df.right)/2<5&&k>80;
+      if (k>40&&!inRep){inRep=true;best=0;}
+      if (inRep){ best=Math.max(best,k);
+        if (k<90&&k>50){ setCue('Go lower'); voice.say('Go lower if you can.','sq.low',3,'low'); }
+        if (k>=110){ setCue('Good depth','good'); voice.say('Good depth. Hold, then stand up.','sq.depth',5); }
+        if (valgus){ setCue('Knees out','warn'); voice.say('Push your knees out over your toes.','sq.valgus',4); }
+        if (a.trunkLean>45){ setCue('Chest up','warn'); voice.say('Chest up.','sq.chest',4); }
+        if (heel){ setCue('Heels down','warn'); voice.say('Keep your heels down.','sq.heel',4); }
+        if (id==='overheadSquat'&&Math.min(a.sh.left,a.sh.right)<150){ setCue('Arms up','warn'); voice.say("Arms straight up. Don't let them drift forward.",'sq.arms',4); }
+        if (k<25){ inRep=false; reps++; const d=best>=120?'full depth':best>=100?'good':'shallow'; setCue(`${reps} — ${d}`,'good'); voice.say(`${reps}. ${d}.`); if(reps>=3) voice.say("That's three. Nicely done.",'sq.done',20); }
+      }
+    } else if (id.startsWith('lunge')){
+      const k=a.knee[side]; if(k>40&&!inRep){inRep=true;best=0;}
+      if (inRep){ best=Math.max(best,k); if(k<80){setCue('Lower');voice.say('Drop the back knee lower.','lg.low',3,'low');}
+        if(a.trunkLean>25){setCue('Stay tall','warn');voice.say("Stay tall. Don't lean forward.",'lg.lean',4);} if(a.valgus[side]>4){setCue('Knee out','warn');voice.say('Front knee is tracking inward. Push it out.','lg.valgus',4);}
+        if(k<20){inRep=false;reps++;setCue(String(reps),'good');voice.say(String(reps));} }
+    } else if (id.startsWith('balance')){
+      const lifted=id==='balanceLeft'?'rightAnkle':'leftAnkle', stance=id==='balanceLeft'?'leftAnkle':'rightAnkle', up=p.j[lifted][1]-p.j[stance][1]>0.05;
+      if (up){ if(holdStart==null){holdStart=el; setCue('Hold steady','good'); voice.say("Foot's up. Hold steady. Eyes on one spot.",'bal.start',30);}
+        const held=Math.floor(el-holdStart); if(held>0&&held%10===0&&held!==lastSec){lastSec=held;setCue(held+' s','good');voice.say(`${held} seconds. Keep going.`);}
+        if(a.trunkLean>15){setCue('Shoulders over hips','warn');voice.say('Stack your shoulders over your hips.','bal.lean',5);} }
+      else if (holdStart!=null){ setCue('Lift the foot','warn'); voice.say('Foot touched down. Lift it again if you can.','bal.touch',5); }
+      else setCue('Lift one foot');
+    } else if (id==='forwardBend'){
+      if(el<1) voice.say('Keep your knees straight and reach for your toes.','fb.go',30);
+      if(a.trunkLean>75){setCue('Great reach. Hold','good');voice.say('Great reach. Hold it.','fb.hold',8);} else if(a.trunkLean>40){setCue('Reach further');voice.say("Reach a little further if it's comfortable.",'fb.more',4,'low');}
+      if((a.knee.left+a.knee.right)/2>15){setCue('Knees straight','warn');voice.say('Keep your knees straight.','fb.knees',4);}
+    } else if (id==='shoulder'){
+      const l=a.sh.left,r=a.sh.right;
+      if(Math.min(l,r)>=170){setCue('Full overhead. Hold','good');voice.say('Full overhead. Hold.','sh.full',8);} else if(Math.min(l,r)<150){setCue('Reach higher');voice.say('Reach higher. Arms by your ears.','sh.more',4,'low');}
+      if(Math.abs(l-r)>15){setCue((l<r?'Left':'Right')+' arm higher','warn');voice.say((l<r?'Left':'Right')+' arm is lower. Bring it up.','sh.asym',5);}
+      if(a.trunkLean>15){setCue("Don't arch",'warn');voice.say("Don't arch your back to get there.",'sh.arch',5);}
+    } else if (id==='sitToStand'){
+      const h=a.hip.left; if(h>60&&!inRep) inRep=true; if(inRep&&h<20){inRep=false;reps++;setCue(String(reps),'good');voice.say(String(reps),null,0,'low');}
+      if(Math.floor(30-el)===10&&lastSec!==10){lastSec=10;voice.say('Ten seconds left. Push!');}
+      if(a.trunkLean>40&&inRep) voice.say('Try not to throw your chest forward.','sts.lean',6,'low');
+    } else if (id==='gait'){ if(el<1) voice.say('Walk toward me at your normal pace.','gait.go',30); setCue('Walk'); }
+  };
+}
+function reviewLine(o){
+  const T=TESTS.find(t=>t.id===o.id).title; let s=`${T}: ${Math.round(o.score)} out of 100. `;
+  if (o.m.kneeL!=null) s+=`Knee bend ${Math.round(o.m.kneeL)} left, ${Math.round(o.m.kneeR)} right. `;
+  if (o.m.hold!=null) s+=`Held ${Math.round(o.m.hold)} seconds. `; if (o.id==='sitToStand') s+=`${o.m.reps} reps. `;
+  if (o.m.fatigue!=null&&o.m.fatigue<0.85) s+='You slowed down noticeably at the end. Endurance work will help. ';
+  for (const f of o.flags) s+=f.includes('caved')?'Your knees caved inward. We will work on hip strength. ':f.includes('lean')?'You leaned forward a lot, which usually means tight ankles or hips. ':f+'. ';
+  return s+(o.score>=80?'Strong.':o.score>=60?'Solid. Room to improve.':'This is a focus area.');
+}
+
+/* ---------------- assessment flow ---------------- */
+async function runAssessment(){
+  voice.warm();
+  try { await openCamera('environment'); } catch(e){ alert('Camera not available: '+e.message+'\nOpen this page over https and allow camera access.'); return; }
+  const outcomes={}; let cancelled=false;
+  camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();};
+  await calibrate(); if (cancelled) return;
+  for (let i=0;i<TESTS.length;i++){
+    const T=TESTS[i]; let redo=true;
+    while (redo && !cancelled){
+      redo=false;
+      // framing + start
+      setCue(T.title,''); subEl.textContent=`${i+1} of ${TESTS.length}. ${T.ins}`;
+      voice.say(`Test ${i+1} of ${TESTS.length}: ${T.title}. ${T.ins} Tap start when you're ready.`);
+      let inFrame=false; onPose=p=>{ inFrame=!!p&&p.coverage>=0.7; if(!inFrame) voice.say('Step back into the frame.','frame',5); };
+      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button><button class="btn" id="go">Start</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();r();}; camctl.querySelector('#go').onclick=()=>{ if(!inFrame){voice.say('I need to see your whole body first.','need',4);return;} r(); }; });
+      if (cancelled) return;
+      // countdown
+      onPose=null; subEl.textContent=''; camctl.innerHTML='';
+      for (const n of [3,2,1]){ countEl.textContent=n; voice.say(String(n),null,0,'critical'); await sleep(1000); }
+      countEl.textContent=''; voice.say('Go.',null,0,'critical');
+      // record
+      const frames=[], coach=makeCoach(T.id), t0=performance.now(); let stopEarly=false;
+      camctl.innerHTML='<button class="btn quiet" id="stop">Stop early</button>'; camctl.querySelector('#stop').onclick=()=>stopEarly=true;
+      onPose=p=>{ if(p) frames.push(p); coach(p,(performance.now()-t0)/1000); };
+      while ((performance.now()-t0)/1000<T.dur && !stopEarly && !cancelled){ subEl.textContent=`${Math.ceil(T.dur-(performance.now()-t0)/1000)} s`; await sleep(200); }
+      onPose=null; if (cancelled) return;
+      voice.say('Stop. Relax.',null,0,'critical');
+      const o=analyze(T.id,frames); outcomes[T.id]=o;
+      setCue(`${Math.round(o.score)} / 100`, o.score>=80?'good':o.score>=60?'':'warn'); subEl.textContent=T.title+(o.flags.length?' — '+o.flags.join(', '):'');
+      voice.say(reviewLine(o));
+      await new Promise(r=>{ camctl.innerHTML='<button class="btn quiet" id="redo">Redo</button><button class="btn" id="next">Next</button>'; camctl.querySelector('#redo').onclick=()=>{redo=true;voice.say('Let us redo '+T.title+'.');r();}; camctl.querySelector('#next').onclick=r; });
+    }
+  }
+  closeCamera(); finishSession(outcomes);
+}
+function finishSession(outcomes){
+  const end=endurance(S.profile.health||{}), post=S.posture.at(-1)?.score??null;
+  const sub=subScores(outcomes,end,post), f=fmi(sub), o=overall(sub), mAge=movementAge(o);
+  const sess={ date:Date.now(), fmi:f, overall:o, movementAge:mAge, ...sub, tests:outcomes };
+  const prev=S.sessions.at(-1); S.sessions.push(sess);
+  S.plan={ weekStart:startOfWeek(), days:weeklyPlan(sub) }; S.done={};
+  const g=goal(sub); const earned=[];
+  const has=id=>S.badges.includes(id); if(!has('first')) earned.push('first'); if(sub.bal>=90&&!has('balance')) earned.push('balance'); if(sub.flex>=90&&!has('flex')) earned.push('flex'); if(sub.str>=80&&!has('strength')) earned.push('strength'); if(f>=90&&!has('elite')) earned.push('elite');
+  const base=S.sessions.find(s=>s.date<=sess.date-30*86400000); if(base&&f-base.fmi>=5&&!has('improve30')) earned.push('improve30');
+  S.badges.push(...earned); save();
+  earned.forEach(b=>voice.say('Badge earned: '+BADGES.find(x=>x[0]===b)[1]+'.'));
+  voice.say(sessionSummary(prev,sub,g,mAge));
+  show('home');
+}
+const startOfWeek=()=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime(); };
+const todayIdx=()=>(new Date().getDay()+6)%7;
+
+/* ---------------- posture ---------------- */
+async function runPosture(){
+  voice.warm();
+  try { await openCamera('user'); } catch(e){ alert('Camera not available: '+e.message); return; }
+  const frames=[]; let cancelled=false; camctl.innerHTML='<button class="btn quiet" id="camx">Cancel</button>'; camctl.querySelector('#camx').onclick=()=>{cancelled=true;closeCamera();};
+  setCue('Stand naturally',''); subEl.textContent='Side-on to the camera, arms relaxed. 10 seconds.';
+  voice.say("Stand naturally, side on to the camera. Don't correct yourself. I want to see your default posture. Ten seconds.");
+  const t0=performance.now(); onPose=p=>{ if(p) frames.push(p); };
+  while ((performance.now()-t0)<10000&&!cancelled){ subEl.textContent=`${Math.ceil(10-(performance.now()-t0)/1000)} s`; await sleep(200); }
+  if (cancelled) return; closeCamera();
+  const n=frames.length; if (n<10){ voice.say("I couldn't see you clearly. Try again with more light."); alert('Not enough frames. Try again with more light.'); return; }
+  const mid_=frames.slice(Math.floor(n/5),Math.floor(n*4/5)); const fh=[],sr=[],pt=[],sa=[],ha=[];
+  for (const f of mid_){ const j=f.j; const hn=sub(j.head,j.neck); fh.push(deg(Math.atan2(Math.abs(hn[2]),Math.max(1e-3,hn[1]))));
+    const t=sub(mid(j.leftShoulder,j.rightShoulder),mid(j.leftHip,j.rightHip)); sr.push(deg(Math.atan2(-t[2],Math.max(1e-3,t[1]))));
+    const ps=sub(j.spine,j.pelvis); pt.push(deg(Math.atan2(ps[2],Math.max(1e-3,ps[1])))); sa.push((j.leftShoulder[1]-j.rightShoulder[1])*100); ha.push((j.leftHip[1]-j.rightHip[1])*100); }
+  const m={ fwdHead:mean(fh), shRound:Math.max(0,mean(sr)), pelvTilt:mean(pt), shAsym:mean(sa), hipAsym:mean(ha) };
+  m.score=.3*sc(m.fwdHead,N.fwdHead)+.25*sc(m.shRound,N.shRound)+.2*sc(Math.abs(m.pelvTilt),N.pelvTilt)+.125*sc(Math.abs(m.shAsym),N.tilt)+.125*sc(Math.abs(m.hipAsym),N.tilt);
+  let t=`Posture score ${Math.round(m.score)}. `; if(m.fwdHead>12) t+='Your head sits forward. Tuck the chin and lengthen the back of the neck. '; if(m.shRound>12) t+='Shoulders are rounded forward. Open the chest. '; if(Math.abs(m.shAsym)>2) t+=`Your ${m.shAsym>0?'left':'right'} shoulder is higher. `; if(t.length<30) t+='Looking good.';
+  m.date=Date.now(); m.summary=t; S.posture.push(m); save(); voice.say(t); show('posture');
+}
+
+/* ---------------- guided workout ---------------- */
+async function guided(keys){
+  voice.warm(); const list=keys.map(k=>EX[k]); if(!list.length) return;
+  const wrap=document.getElementById('view'); let cancelled=false, tick=null;
+  const render=(h)=>{ wrap.innerHTML=`<h1>Guided session</h1>${h}<button class="btn quiet" id="gx">End session</button>`; wrap.querySelector('#gx').onclick=()=>{cancelled=true;voice.stop();clearInterval(tick);show('plan');}; };
+  voice.say(`Today's session has ${list.length} exercises. First: ${list[0].n}. ${list[0].cue}`); await sleep(4000);
+  for (let i=0;i<list.length&&!cancelled;i++){
+    const e=list[i]; if(i>0){ voice.say(`Next: ${e.n}. ${e.cue}`); await sleep(5000); }
+    for (let s=1;s<=e.sets&&!cancelled;s++){
+      for (const side of (e.side?['left','right']:[null])){
+        if (cancelled) break; const st=side?` ${side} side`:'';
+        if (e.hold){ voice.say(`Set ${s}${st}. Hold for ${e.hold} seconds. Go.`); let left=e.hold;
+          await new Promise(r=>{ render(`<div class="panel"><p>${e.n}${st}</p><div class="big" id="n">${left}</div><p>${e.cue}</p></div>`); tick=setInterval(()=>{ left--; document.getElementById('n').textContent=left; if(left===Math.floor(e.hold/2)) voice.say('Halfway. Breathe.',null,0,'low'); if(left===5) voice.say('Five more seconds.'); if(left<=0||cancelled){clearInterval(tick);r();} },1000); });
+        } else { voice.say(`Set ${s}${st}. ${e.reps} reps. Tap each rep.`); let done=0;
+          await new Promise(r=>{ render(`<div class="panel"><p>${e.n}${st}</p><div class="big" id="n">0 / ${e.reps}</div><p>${e.cue}</p><button class="btn" id="rep">Count rep</button></div>`); document.getElementById('rep').onclick=()=>{ done++; document.getElementById('n').textContent=`${done} / ${e.reps}`; voice.say(String(done),null,0,'low'); if(done>=e.reps) r(); }; const w=setInterval(()=>{ if(cancelled){clearInterval(w);r();} },300); });
+        }
+      }
+      if (s<e.sets&&!cancelled){ voice.say(`Set ${s} done. Rest 30 seconds.`); let left=30; await new Promise(r=>{ render(`<div class="panel"><p>Rest</p><div class="big" id="n">${left}</div></div>`); tick=setInterval(()=>{ left--; document.getElementById('n').textContent=left; if(left<=0||cancelled){clearInterval(tick);r();} },1000); }); }
+    }
+  }
+  if (!cancelled){ voice.say('Session complete. Every day you do this moves your score. See you tomorrow.'); const d=todayIdx(); S.done[d]=keys.slice(); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; save(); render('<div class="panel"><div class="big">Done</div><p>Every session moves the score.</p></div>'); }
+}
+
+/* ---------------- views ---------------- */
+const view=document.getElementById('view');
+function show(tab){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  ({home,assess,plan,posture,settings})[tab]();
+}
+function chart(canvas, series, range){
+  const cutoff=Date.now()-range*86400000, data=S.sessions.filter(s=>s.date>=cutoff); const c=canvas.getContext('2d'); const W=canvas.width=canvas.clientWidth*2, H=canvas.height=canvas.clientHeight*2;
+  c.clearRect(0,0,W,H); c.lineWidth=2; c.setLineDash([8,8]); c.strokeStyle='#26385A'; c.beginPath(); c.moveTo(0,H*0.1); c.lineTo(W,H*0.1); c.stroke(); c.setLineDash([]);
+  c.fillStyle='#9AA7BD'; c.font='22px sans-serif'; c.fillText('Elite 90',12,H*0.1-8);
+  if (data.length<2){ c.fillText(data.length?'One session. Trend appears after the next.':'No sessions yet.',12,H-16); return; }
+  const x0=data[0].date, x1=data.at(-1).date;
+  for (const [k,col] of series){ c.strokeStyle=col; c.lineWidth=4; c.beginPath(); data.forEach((s,i)=>{ const x=(s.date-x0)/(x1-x0||1)*(W-40)+20, y=H-(s[k]/100)*H*0.9-H*0.05; i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke(); }
+}
+function home(){
+  const s=S.sessions.at(-1);
+  if (!s){ view.innerHTML=`<h1>Motion IQ</h1><div class="empty"><p class="ink" style="font-size:20px">No assessment yet</p><p>Prop your phone up, step back, and the coach will guide you by voice through ten short tests.</p><button class="btn" id="go">Start first assessment</button></div>`; view.querySelector('#go').onclick=runAssessment; return; }
+  const g=goal(s), p=S.posture.at(-1);
+  const gm=new Date(s.date).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  view.innerHTML=`<h1>Motion IQ</h1>
+   <div class="panel"><p>Farmaha Mobility Index · ${gm}</p><div class="big">${Math.round(s.fmi)}</div><div class="band">${g.band}</div>
+   <p style="margin-top:8px">Movement age ${s.movementAge} (estimate)${g.eliteDate?` · on track for Elite by ${g.eliteDate.toLocaleDateString(undefined,{month:'short',year:'numeric'})}`:g.band!=='Elite'?` · ${Math.round(g.toElite)} points to Elite. Focus: ${g.weak}`:''}</p></div>
+   <div class="grid">${[['Movement',s.overall],['Flexibility',s.flex],['Mobility',s.mob],['Balance',s.bal],['Strength',s.str],['Endurance',s.end],['Posture',p?.score]].map(([n,v])=>`<div class="stat"><b>${v==null?'–':Math.round(v)}</b><span>${n}${v==null?' (no data)':''}</span></div>`).join('')}</div>
+   <h2>Regional flexibility</h2><div class="regions">${Object.entries(s.reg).map(([k,v])=>`<div><i style="background:hsl(${v*1.2} 70% 45%)"></i>${k}<br><b class="ink">${Math.round(v)}</b></div>`).join('')}</div>
+   ${flagsHtml(s)}
+   <div class="seg" id="rng">${[['D',1],['W',7],['M',30],['Y',365]].map(([l,d],i)=>`<button data-d="${d}" class="${i===2?'on':''}">${l}</button>`).join('')}</div>
+   <canvas class="chart" id="ch"></canvas><p class="tip">Amber: FMI · Green: balance · Blue: flexibility</p>
+   <h2>Badges</h2><div class="badges">${BADGES.map(([id,n])=>`<span class="${S.badges.includes(id)?'on':''}">${n}</span>`).join('')}</div>
+   <button class="btn" id="go">New assessment</button>`;
+  view.querySelector('#go').onclick=runAssessment;
+  const cv=view.querySelector('#ch'); const rd=()=>chart(cv,[['fmi','#FFB020'],['bal','#3DDC97'],['flex','#6FA8FF']],+view.querySelector('#rng .on').dataset.d); rd();
+  view.querySelectorAll('#rng button').forEach(b=>b.onclick=()=>{ view.querySelectorAll('#rng button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); rd(); });
+  briefing(s,g);
+}
+function flagsHtml(s){ const sq=s.tests?.deepSquat; if(!sq) return ''; const out=[]; if(sq.m.kneeSym!=null) out.push(`Left–right knee symmetry ${Math.round(sq.m.kneeSym)}%`); sq.flags.forEach(f=>out.push('Risk: '+f)); if(sq.m.fatigue<0.85) out.push(`Fatigue: velocity dropped ${Math.round((1-sq.m.fatigue)*100)}% across reps`); return out.length?`<div class="panel">${out.map(x=>`<p class="ink">${x}</p>`).join('')}</div>`:''; }
+function briefing(s,g){
+  const k='brief.'+new Date().toDateString(); if (S[k]) return; S[k]=1; save();
+  const streak=streakDays(), plan=S.plan, d=todayIdx(), today=plan?plan.days[d].map(k=>EX[k].n):[]; const adh=planAdherence();
+  let t=streak>1?`Day ${streak} in a row. `:'Welcome back. '; t+=adh>=.8?`You've completed ${Math.round(adh*100)} percent of this week's plan. Excellent. `:`You're at ${Math.round(adh*100)} percent of this week's plan. Let's close the gap. `;
+  if (today.length) t+='Today: '+today.slice(0,3).join(', ')+'. '; t+=`${Math.round(g.toElite)} points to Elite.`; voice.say(t);
+}
+function streakDays(){ let n=0; const d=new Date(); while(S.streak?.[d.toDateString()]){ n++; d.setDate(d.getDate()-1); } return n; }
+function planAdherence(){ if(!S.plan) return 0; const total=S.plan.days.slice(0,todayIdx()+1).reduce((a,d)=>a+d.length,0); const done=Object.values(S.done).reduce((a,d)=>a+d.length,0); return total?Math.min(1,done/total):0; }
+function assess(){
+  view.innerHTML=`<h1>Assessment</h1><div class="panel"><p class="ink">Ten tests, about eight minutes. The coach speaks every instruction — turn your volume up.</p><p style="margin-top:10px">Lean the phone upright at hip height with the back camera facing you. You'll need about 3 m of space and a chair.</p></div>
+  <h2>The tests</h2>${TESTS.map((t,i)=>`<div class="ex"><span style="color:var(--dim);width:22px">${i+1}</span><div>${t.title}<small>${t.ins}</small></div></div>`).join('')}
+  <button class="btn" id="go">Start assessment</button><p class="tip">The app runs entirely in your browser. Video never leaves this device.</p>`;
+  view.querySelector('#go').onclick=runAssessment;
+}
+function plan(){
+  if (!S.plan){ view.innerHTML=`<h1>Weekly plan</h1><div class="empty"><p class="ink" style="font-size:20px">No plan yet</p><p>Complete an assessment and your first week is generated from what needs work.</p></div>`; return; }
+  const d=todayIdx(), names=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  view.innerHTML=`<h1>Weekly plan</h1><div class="panel"><p>Plan completion this week</p><div class="big" style="font-size:44px">${Math.round(planAdherence()*100)}%</div></div>
+  ${S.plan.days.map((keys,i)=>`<h2>${i===d?'Today':names[i]}</h2>${keys.map(k=>{const e=EX[k];const done=S.done[i]?.includes(k);return `<div class="ex"><input type="checkbox" data-d="${i}" data-k="${k}" ${done?'checked':''}><div>${e.n}<small>${e.sets} × ${e.reps?e.reps+' reps':e.hold+' s'}${e.side?' each side':''} · ${e.a}</small></div></div>`;}).join('')}${i===d&&keys.length?`<button class="btn" id="guide">Start guided session</button>`:''}`).join('')}`;
+  view.querySelectorAll('input[type=checkbox]').forEach(c=>c.onchange=()=>{ const i=+c.dataset.d,k=c.dataset.k; S.done[i]=S.done[i]||[]; if(c.checked){ if(!S.done[i].includes(k)) S.done[i].push(k); S.streak=S.streak||{}; S.streak[new Date().toDateString()]=1; } else S.done[i]=S.done[i].filter(x=>x!==k); save(); });
+  view.querySelector('#guide')?.addEventListener('click',()=>guided(S.plan.days[d]));
+}
+function posture(){
+  const p=S.posture.at(-1);
+  view.innerHTML=`<h1>Posture</h1>${p?`<div class="panel"><p>${new Date(p.date).toLocaleDateString()}</p><div class="big">${Math.round(p.score)}</div><p class="ink" style="margin-top:8px">${p.summary}</p><p class="tip">Forward head ${p.fwdHead.toFixed(0)}° · shoulders ${p.shRound.toFixed(0)}° · shoulder tilt ${p.shAsym.toFixed(1)} cm</p></div>`:'<div class="empty"><p>Stand side-on to the front camera for ten seconds. Don\'t fix your posture — the point is to see your default.</p></div>'}
+  <button class="btn" id="go">Start 10-second check</button>`;
+  view.querySelector('#go').onclick=runPosture;
+}
+function settings(){
+  const h=S.profile.health||{};
+  view.innerHTML=`<h1>Settings</h1>
+  <label class="f">Birth date (for age-referenced norms)<input type="date" id="birth" value="${S.profile.birth||''}"></label>
+  <label class="f">Reference norms<select id="sex"><option value="0" ${!S.profile.female?'selected':''}>Male</option><option value="1" ${S.profile.female?'selected':''}>Female</option></select></label>
+  <div class="toggle"><span>Voice guidance</span><input type="checkbox" id="voice" ${S.profile.voice?'checked':''}></div>
+  <h2>Endurance (from your watch or Health app)</h2>
+  <label class="f">VO₂ max (ml/kg/min)<input type="number" id="vo2" value="${h.vo2||''}" inputmode="decimal"></label>
+  <label class="f">Resting heart rate<input type="number" id="rhr" value="${h.rhr||''}" inputmode="numeric"></label>
+  <label class="f">Active minutes last 7 days<input type="number" id="mins" value="${h.mins||''}" inputmode="numeric"></label>
+  <label class="f">Average daily steps<input type="number" id="steps" value="${h.steps||''}" inputmode="numeric"></label>
+  <p class="tip">Fill these in before an assessment and the Endurance score joins the index. Leave blank and the index renormalises without it.</p>
+  <h2>Your data</h2><p>Everything is stored in this browser on this device. Video is never saved or sent anywhere. Export a backup to move your history to another device.</p>
+  <button class="btn quiet" id="exp">Export backup</button><button class="btn quiet" id="imp">Import backup</button><input type="file" id="file" accept=".json" hidden>
+  <button class="btn quiet" id="del" style="color:var(--warn)">Delete all my data</button>
+  <p class="tip" style="margin-top:20px">Motion IQ gives wellness estimates from a single phone camera, not medical measurements. Angles are typically within 3–8° in the side plane and less reliable for rotation.</p>`;
+  const bind=(id,fn)=>view.querySelector('#'+id).onchange=e=>{fn(e.target);save();};
+  bind('birth',e=>S.profile.birth=e.value); bind('sex',e=>S.profile.female=e.value==='1'); bind('voice',e=>S.profile.voice=e.checked);
+  for (const k of ['vo2','rhr','mins','steps']) bind(k,e=>{S.profile.health=S.profile.health||{};S.profile.health[k]=+e.value||null;S.profile.health.female=S.profile.female;});
+  view.querySelector('#exp').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'})); a.download='motioniq-backup.json'; a.click(); };
+  view.querySelector('#imp').onclick=()=>view.querySelector('#file').click();
+  view.querySelector('#file').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const d=JSON.parse(await f.text()); if(!d.sessions){alert('Not a Motion IQ backup.');return;} localStorage.setItem(DB,JSON.stringify(d)); location.reload(); };
+  view.querySelector('#del').onclick=()=>{ if(confirm('Delete all sessions, plans and settings on this device?')){ localStorage.removeItem(DB); location.reload(); } };
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.tab));
+show('home');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
