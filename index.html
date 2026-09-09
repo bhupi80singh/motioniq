@@ -1002,7 +1002,19 @@ function settings(){
 }
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.tab));
 show('home');
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    setInterval(() => reg.update(), 60000);               // check for a new version every minute
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      nw && nw.addEventListener('statechange', () => {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage('skip');
+      });
+    });
+  }).catch(()=>{});
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!refreshing) { refreshing = true; location.reload(); } });
+}
 </script>
 </body>
 </html>
